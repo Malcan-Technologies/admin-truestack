@@ -122,12 +122,17 @@ export async function POST(
 
     // Use transaction to ensure consistent balance
     const result = await withTransaction(async (txClient) => {
-      // Get current balance with row lock
+      // Lock the client row to prevent concurrent credit modifications
+      await txClient.query(
+        `SELECT id FROM client WHERE id = $1 FOR UPDATE`,
+        [clientId]
+      );
+
+      // Get current balance (no FOR UPDATE needed since we locked the client row)
       const balanceResult = await txClient.query<{ balance: string }>(
         `SELECT COALESCE(SUM(amount), 0) as balance 
          FROM credit_ledger 
-         WHERE client_id = $1 AND product_id = $2
-         FOR UPDATE`,
+         WHERE client_id = $1 AND product_id = $2`,
         [clientId, productId]
       );
 

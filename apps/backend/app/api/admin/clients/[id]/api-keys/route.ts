@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { query, queryOne } from "@truestack/shared/db";
-import { generateApiKey, formatKeyForDisplay } from "@truestack/shared/api-keys";
+import { generateApiKey, formatKeyForDisplay, decryptKey } from "@truestack/shared/api-keys";
 
 // GET /api/admin/clients/:id/api-keys - List API keys for a client
 export async function GET(
@@ -30,8 +30,10 @@ export async function GET(
     const keys = await query<{
       id: string;
       product_id: string;
+      product_name: string;
       api_key_prefix: string;
       api_key_suffix: string;
+      api_key_encrypted: string;
       environment: string;
       status: string;
       created_at: string;
@@ -42,6 +44,7 @@ export async function GET(
         cak.product_id,
         cak.api_key_prefix,
         cak.api_key_suffix,
+        cak.api_key_encrypted,
         cak.environment,
         cak.status,
         cak.created_at,
@@ -56,10 +59,22 @@ export async function GET(
     );
 
     return NextResponse.json(
-      keys.map((key) => ({
-        ...key,
-        displayKey: formatKeyForDisplay(key.api_key_prefix, key.api_key_suffix),
-      }))
+      keys.map((key) => {
+        // Decrypt the API key for admin viewing
+        let fullKey = "";
+        try {
+          fullKey = decryptKey(key.api_key_encrypted);
+        } catch (e) {
+          console.error("Failed to decrypt API key:", e);
+        }
+        
+        return {
+          ...key,
+          api_key_encrypted: undefined, // Don't send encrypted data to client
+          key: fullKey,
+          displayKey: formatKeyForDisplay(key.api_key_prefix, key.api_key_suffix),
+        };
+      })
     );
   } catch (error) {
     console.error("Error fetching API keys:", error);
