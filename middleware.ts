@@ -4,7 +4,7 @@ import { auth } from "@/lib/auth";
 export const runtime = "nodejs";
 
 // Routes that don't require authentication
-const publicRoutes = ["/login", "/api/auth", "/api/v1", "/internal", "/r"];
+const publicRoutes = ["/login", "/api/auth", "/api/v1", "/internal", "/r", "/health", "/api/health"];
 
 function isPublicRoute(pathname: string): boolean {
   return publicRoutes.some(
