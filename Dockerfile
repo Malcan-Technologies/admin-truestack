@@ -8,8 +8,9 @@ RUN corepack enable pnpm
 FROM base AS deps
 WORKDIR /app
 
-# Copy package files and prisma schema (needed for postinstall)
+# Copy package files, prisma config, and prisma schema (needed for postinstall)
 COPY package.json pnpm-lock.yaml ./
+COPY prisma.config.mjs ./
 COPY prisma/ ./prisma/
 
 # Install dependencies (postinstall runs prisma generate)

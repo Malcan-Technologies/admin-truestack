@@ -8,8 +8,9 @@ WORKDIR /app
 # Install pnpm and openssl (needed by Prisma)
 RUN corepack enable pnpm && apk add --no-cache openssl
 
-# Copy package files and prisma schema first (needed for postinstall)
+# Copy package files, prisma config, and prisma schema (needed for postinstall)
 COPY package.json pnpm-lock.yaml ./
+COPY prisma.config.mjs ./
 COPY prisma/ ./prisma/
 
 # Install dependencies (postinstall will run prisma generate)
