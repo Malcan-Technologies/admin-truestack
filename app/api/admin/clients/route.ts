@@ -1,0 +1,128 @@
+import { NextRequest, NextResponse } from "next/server";
+import { auth } from "@/lib/auth";
+import { query, queryOne } from "@/lib/db";
+
+// GET /api/admin/clients - List all clients
+export async function GET(request: NextRequest) {
+  try {
+    const session = await auth.api.getSession({ headers: request.headers });
+    if (!session?.user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const clients = await query<{
+      id: string;
+      name: string;
+      code: string;
+      contact_email: string | null;
+      contact_phone: string | null;
+      company_registration: string | null;
+      status: string;
+      notes: string | null;
+      created_at: string;
+      updated_at: string;
+    }>(`
+      SELECT 
+        c.id,
+        c.name,
+        c.code,
+        c.contact_email,
+        c.contact_phone,
+        c.company_registration,
+        c.status,
+        c.notes,
+        c.created_at,
+        c.updated_at,
+        COALESCE(SUM(cl.amount), 0) as credit_balance,
+        COUNT(DISTINCT ks.id) as sessions_count
+      FROM client c
+      LEFT JOIN credit_ledger cl ON cl.client_id = c.id AND cl.product_id = 'true_identity'
+      LEFT JOIN kyc_session ks ON ks.client_id = c.id
+      GROUP BY c.id
+      ORDER BY c.created_at DESC
+    `);
+
+    return NextResponse.json(clients);
+  } catch (error) {
+    console.error("Error fetching clients:", error);
+    return NextResponse.json(
+      { error: "Failed to fetch clients" },
+      { status: 500 }
+    );
+  }
+}
+
+// POST /api/admin/clients - Create a new client
+export async function POST(request: NextRequest) {
+  try {
+    const session = await auth.api.getSession({ headers: request.headers });
+    if (!session?.user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const body = await request.json();
+    const { name, code, contactEmail, contactPhone, companyRegistration, notes } = body;
+
+    // Validate required fields
+    if (!name || !code) {
+      return NextResponse.json(
+        { error: "Name and code are required" },
+        { status: 400 }
+      );
+    }
+
+    // Validate code format
+    if (!/^[A-Z0-9_]+$/.test(code)) {
+      return NextResponse.json(
+        { error: "Code must contain only uppercase letters, numbers, and underscores" },
+        { status: 400 }
+      );
+    }
+
+    // Check if code already exists
+    const existing = await queryOne<{ id: string }>(
+      "SELECT id FROM client WHERE code = $1",
+      [code]
+    );
+
+    if (existing) {
+      return NextResponse.json(
+        { error: "A client with this code already exists" },
+        { status: 409 }
+      );
+    }
+
+    // Create client
+    const client = await queryOne<{
+      id: string;
+      name: string;
+      code: string;
+      contact_email: string | null;
+      contact_phone: string | null;
+      company_registration: string | null;
+      status: string;
+      notes: string | null;
+      created_at: string;
+    }>(
+      `INSERT INTO client (name, code, contact_email, contact_phone, company_registration, notes, created_by)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
+       RETURNING id, name, code, contact_email, contact_phone, company_registration, status, notes, created_at`,
+      [name, code, contactEmail || null, contactPhone || null, companyRegistration || null, notes || null, session.user.id]
+    );
+
+    // Create default TrueIdentity product config for this client
+    await query(
+      `INSERT INTO client_product_config (client_id, product_id, enabled)
+       VALUES ($1, 'true_identity', true)`,
+      [client!.id]
+    );
+
+    return NextResponse.json(client, { status: 201 });
+  } catch (error) {
+    console.error("Error creating client:", error);
+    return NextResponse.json(
+      { error: "Failed to create client" },
+      { status: 500 }
+    );
+  }
+}

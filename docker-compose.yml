@@ -1,0 +1,70 @@
+version: "3.8"
+
+services:
+  # PostgreSQL database
+  postgres:
+    image: postgres:16-alpine
+    container_name: trueidentity-postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: trueidentity
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./db/migrations:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Next.js application (development mode)
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: trueidentity-app
+    ports:
+      - "3000:3000"
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/trueidentity
+      - BETTER_AUTH_SECRET=development-secret-change-in-prod
+      - BETTER_AUTH_URL=http://localhost:3000
+      - NEXT_PUBLIC_BETTER_AUTH_URL=http://localhost:3000
+      - API_KEY_ENCRYPTION_SECRET=0000000000000000000000000000000000000000000000000000000000000000
+      - INNOVATIF_API_KEY=${INNOVATIF_API_KEY:-xmFdJeGRQLh7ApdeYTwZDcTL7MXpU12Y}
+      - INNOVATIF_PACKAGE_NAME=${INNOVATIF_PACKAGE_NAME:-truestack.gateway.test}
+      - INNOVATIF_MD5_KEY=${INNOVATIF_MD5_KEY:-m4X12dM8GeYGYl1gLXO8PaZTERGG9bVt}
+      - INNOVATIF_CIPHERTEXT=${INNOVATIF_CIPHERTEXT:-MTIzNDU2Nzg5MDEy}
+      - INNOVATIF_BASE_URL=${INNOVATIF_BASE_URL:-https://staging.ekyc.xendity.com/v1/gateway}
+      - AWS_REGION=ap-southeast-5
+      - S3_KYC_BUCKET=${S3_KYC_BUCKET:-trueidentity-kyc-documents-dev}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    # For development, you can mount source code for hot reloading:
+    # volumes:
+    #   - .:/app
+    #   - /app/node_modules
+    #   - /app/.next
+
+  # LocalStack for S3 (optional, for local S3 testing)
+  localstack:
+    image: localstack/localstack:latest
+    container_name: trueidentity-localstack
+    ports:
+      - "4566:4566"
+    environment:
+      - SERVICES=s3
+      - DEBUG=0
+      - PERSISTENCE=1
+    volumes:
+      - localstack_data:/var/lib/localstack
+    profiles:
+      - local-aws
+
+volumes:
+  postgres_data:
+  localstack_data:

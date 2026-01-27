@@ -39,3 +39,19 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Terraform
+terraform/.terraform/
+terraform/*.tfstate
+terraform/*.tfstate.*
+terraform/*.tfplan
+terraform/backend.tf
+terraform/.terraform.lock.hcl
+
+# Secrets (never commit these)
+*.tfvars.secret
+secrets/
+
+# IDE
+.idea/
+.vscode/

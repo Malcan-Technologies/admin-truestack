@@ -1,0 +1,23 @@
+# Migration Runner Dockerfile
+# This is a lightweight image just for running database migrations
+
+FROM node:22-alpine
+
+WORKDIR /app
+
+# Install pnpm
+RUN corepack enable pnpm
+
+# Copy package files
+COPY package.json pnpm-lock.yaml ./
+
+# Install dependencies (only what's needed for migrations)
+RUN pnpm install --frozen-lockfile
+
+# Copy migration files and scripts
+COPY db/ ./db/
+COPY scripts/run-migrations.ts ./scripts/
+COPY tsconfig.json ./
+
+# Run migrations
+CMD ["npx", "tsx", "scripts/run-migrations.ts"]
