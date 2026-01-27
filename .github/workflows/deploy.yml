@@ -108,6 +108,7 @@ jobs:
           IMAGE_TAG: ${{ github.sha }}
         run: |
           docker build -f apps/frontend/Dockerfile \
+            --build-arg NEXT_PUBLIC_API_URL=https://api.truestack.my \
             -t $ECR_REGISTRY/$ECR_REPOSITORY_FRONTEND:$IMAGE_TAG .
           docker tag $ECR_REGISTRY/$ECR_REPOSITORY_FRONTEND:$IMAGE_TAG \
             $ECR_REGISTRY/$ECR_REPOSITORY_FRONTEND:latest

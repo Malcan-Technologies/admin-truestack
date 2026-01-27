@@ -41,6 +41,9 @@ COPY apps/admin/ ./apps/admin/
 # Build the admin application
 WORKDIR /app/apps/admin
 ENV NEXT_TELEMETRY_DISABLED=1
+# NEXT_PUBLIC_* variables must be set at build time as they're inlined into the JS bundle
+ARG NEXT_PUBLIC_API_URL=https://api.truestack.my
+ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
 RUN pnpm build
 
 # Build core app

@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Loader2 } from "lucide-react";
+import Image from "next/image";
 
 function LoginForm() {
   const router = useRouter();
@@ -47,11 +48,17 @@ function LoginForm() {
     <Card className="border-slate-800 bg-slate-900/80 backdrop-blur-sm">
       <CardHeader className="text-center">
         {/* Logo */}
-        <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-violet-500">
-          <span className="text-xl font-bold text-white">T</span>
+        <div className="mx-auto mb-4">
+          <Image
+            src="/truestack-white.svg"
+            alt="TrueStack"
+            width={180}
+            height={40}
+            priority
+          />
         </div>
         <CardTitle className="text-2xl font-semibold text-white">
-          TrueStack Admin
+          Admin Portal
         </CardTitle>
         <CardDescription className="text-slate-400">
           Sign in to access the admin portal
@@ -117,27 +124,37 @@ function LoginForm() {
 
 export default function LoginPage() {
   return (
-    <Suspense fallback={
-      <Card className="border-slate-800 bg-slate-900/80 backdrop-blur-sm">
-        <CardHeader className="text-center">
-          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-violet-500">
-            <span className="text-xl font-bold text-white">T</span>
-          </div>
-          <CardTitle className="text-2xl font-semibold text-white">
-            TrueStack Admin
-          </CardTitle>
-          <CardDescription className="text-slate-400">
-            Loading...
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="flex items-center justify-center py-8">
-            <Loader2 className="h-8 w-8 animate-spin text-indigo-500" />
-          </div>
-        </CardContent>
-      </Card>
-    }>
-      <LoginForm />
-    </Suspense>
+    <div className="flex min-h-screen items-center justify-center bg-slate-950 px-4">
+      <div className="w-full max-w-md">
+        <Suspense fallback={
+          <Card className="border-slate-800 bg-slate-900/80 backdrop-blur-sm">
+            <CardHeader className="text-center">
+              <div className="mx-auto mb-4">
+                <Image
+                  src="/truestack-white.svg"
+                  alt="TrueStack"
+                  width={180}
+                  height={40}
+                  priority
+                />
+              </div>
+              <CardTitle className="text-2xl font-semibold text-white">
+                Admin Portal
+              </CardTitle>
+              <CardDescription className="text-slate-400">
+                Loading...
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="h-8 w-8 animate-spin text-indigo-500" />
+              </div>
+            </CardContent>
+          </Card>
+        }>
+          <LoginForm />
+        </Suspense>
+      </div>
+    </div>
   );
 }

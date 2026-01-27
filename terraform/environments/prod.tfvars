@@ -10,7 +10,7 @@ domain_name = "truestack.my"
 core_domain = "core.truestack.my"
 
 # HTTPS - set to true after ACM certificate is validated
-enable_https = false
+enable_https = true
 
 # Database (use secrets for sensitive values)
 db_username = "trueidentity"
