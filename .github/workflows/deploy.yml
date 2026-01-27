@@ -150,18 +150,55 @@ jobs:
                 --query 'tasks[0].containers[0].exitCode' \
                 --output text)
               
+              # If no exit code, the container never started - get the failure reason
+              if [ "$EXIT_CODE" == "None" ] || [ -z "$EXIT_CODE" ]; then
+                echo "❌ Task failed before container could start"
+                
+                STOPPED_REASON=$(aws ecs describe-tasks \
+                  --cluster ${{ env.ECS_CLUSTER }} \
+                  --tasks $TASK_ARN \
+                  --query 'tasks[0].stoppedReason' \
+                  --output text)
+                echo "Stopped reason: $STOPPED_REASON"
+                
+                CONTAINER_REASON=$(aws ecs describe-tasks \
+                  --cluster ${{ env.ECS_CLUSTER }} \
+                  --tasks $TASK_ARN \
+                  --query 'tasks[0].containers[0].reason' \
+                  --output text)
+                echo "Container reason: $CONTAINER_REASON"
+                
+                exit 1
+              fi
+              
               if [ "$EXIT_CODE" == "0" ]; then
                 echo "✅ Migration completed successfully!"
                 exit 0
               else
                 echo "❌ Migration failed with exit code: $EXIT_CODE"
                 
-                # Get logs
+                # Get stopped reason
+                STOPPED_REASON=$(aws ecs describe-tasks \
+                  --cluster ${{ env.ECS_CLUSTER }} \
+                  --tasks $TASK_ARN \
+                  --query 'tasks[0].stoppedReason' \
+                  --output text)
+                echo "Stopped reason: $STOPPED_REASON"
+                
+                # Get container reason if available
+                CONTAINER_REASON=$(aws ecs describe-tasks \
+                  --cluster ${{ env.ECS_CLUSTER }} \
+                  --tasks $TASK_ARN \
+                  --query 'tasks[0].containers[0].reason' \
+                  --output text)
+                echo "Container reason: $CONTAINER_REASON"
+                
+                # Get logs - ECS log stream format is: prefix/container-name/task-id
                 TASK_ID=$(echo $TASK_ARN | awk -F'/' '{print $NF}')
                 echo "Fetching logs..."
                 aws logs get-log-events \
                   --log-group-name "/ecs/trueidentity-prod" \
-                  --log-stream-name "migrations/$TASK_ID" \
+                  --log-stream-name "migrations/migrations/$TASK_ID" \
                   --limit 50 \
                   --query 'events[*].message' \
                   --output text || true

@@ -91,6 +91,7 @@ module "secrets" {
 
   project_name = var.project_name
   environment  = var.environment
+  database_url = module.rds.connection_string
   secrets = {
     better_auth_secret       = var.better_auth_secret
     api_key_encryption       = var.api_key_encryption_secret
