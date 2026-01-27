@@ -32,6 +32,7 @@ env:
   ECS_CLUSTER: trueidentity-prod
   ECS_SERVICE_BACKEND: trueidentity-prod-backend
   ECS_SERVICE_FRONTEND: trueidentity-prod-frontend
+  ECS_TASK_MIGRATIONS: trueidentity-prod-migrations
 
 jobs:
   build:
@@ -188,7 +189,7 @@ jobs:
         run: |
           # Get task definition ARN
           TASK_DEF_ARN=$(aws ecs describe-task-definition \
-            --task-definition ${{ env.ECS_SERVICE_BACKEND }}-migrations \
+            --task-definition ${{ env.ECS_TASK_MIGRATIONS }} \
             --query 'taskDefinition.taskDefinitionArn' \
             --output text)
           
