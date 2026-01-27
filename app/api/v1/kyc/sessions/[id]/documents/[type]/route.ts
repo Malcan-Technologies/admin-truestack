@@ -108,7 +108,8 @@ export async function GET(
     try {
       const imageBuffer = await getKycDocument(session.s3_path);
 
-      return new NextResponse(imageBuffer, {
+      // Convert Buffer to Uint8Array for NextResponse compatibility
+      return new NextResponse(new Uint8Array(imageBuffer), {
         status: 200,
         headers: {
           "Content-Type": "image/jpeg",
