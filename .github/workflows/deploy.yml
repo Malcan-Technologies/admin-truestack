@@ -32,8 +32,8 @@ jobs:
     name: Build Docker Images
     runs-on: ubuntu-latest
     environment: production
-    # Skip build for deploy-only and migrations-only
-    if: ${{ github.event.inputs.action != 'deploy-only' && github.event.inputs.action != 'migrations-only' }}
+    # Skip build for deploy-only only (migrations-only still needs to build migrations image)
+    if: ${{ github.event.inputs.action != 'deploy-only' }}
     
     permissions:
       id-token: write
@@ -53,8 +53,12 @@ jobs:
       - name: Check for migration changes
         id: check-migrations
         run: |
+          # For migrations-only, always mark as having changes
+          if [ "${{ github.event.inputs.action }}" == "migrations-only" ]; then
+            echo "has_changes=true" >> $GITHUB_OUTPUT
+            echo "📦 Migrations-only mode - will build and run migrations"
           # Check if prisma/ folder has changes compared to previous commit
-          if git diff --name-only HEAD~1 HEAD | grep -q "^prisma/"; then
+          elif git diff --name-only HEAD~1 HEAD | grep -q "^prisma/"; then
             echo "has_changes=true" >> $GITHUB_OUTPUT
             echo "📦 Prisma migration files changed - will run migrations"
           else
@@ -74,6 +78,8 @@ jobs:
 
       - name: Build and push app image
         id: build-image
+        # Skip app image build for migrations-only
+        if: ${{ github.event.inputs.action != 'migrations-only' }}
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           IMAGE_TAG: ${{ github.sha }}
