@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 
+export const runtime = "nodejs";
+
 // Routes that don't require authentication
 const publicRoutes = ["/login", "/api/auth", "/api/v1", "/internal", "/r"];
 
