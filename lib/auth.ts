@@ -1,9 +1,13 @@
 import { betterAuth } from "better-auth";
 import { Pool } from "pg";
 
+// Enable SSL for production PostgreSQL connections (required by RDS)
+const isProduction = process.env.NODE_ENV === "production";
+
 export const auth = betterAuth({
   database: new Pool({
     connectionString: process.env.DATABASE_URL,
+    ssl: isProduction ? { rejectUnauthorized: false } : false,
   }),
   baseURL: process.env.BETTER_AUTH_URL || "http://localhost:3000",
   secret: process.env.BETTER_AUTH_SECRET,

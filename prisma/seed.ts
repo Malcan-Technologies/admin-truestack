@@ -5,11 +5,15 @@ import crypto from "crypto";
 
 // Pre-generated bcrypt hash of 'changeme123' for seed
 // Note: BetterAuth uses bcrypt for password hashing
-const SEED_PASSWORD_HASH = "$2a$10$dKhz7WzQsEaQF3RWbZ5KAeB5GQsL5yZVxJ6k3Q1Z7B5yZ5Q1Z7B5y";
+const SEED_PASSWORD_HASH = "$2b$10$T6Ng/qA2MGQ00xUj6vpmxueHH6mxj3GfQ/VY2/1Mopx7vW8YB4zli";
 
 async function main() {
+  // Enable SSL for production PostgreSQL connections (required by RDS)
+  const isProduction = process.env.NODE_ENV === "production";
+  
   const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
+    ssl: isProduction ? { rejectUnauthorized: false } : false,
   });
   
   const adapter = new PrismaPg(pool);

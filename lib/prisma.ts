@@ -7,12 +7,16 @@ const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined;
 };
 
+// Enable SSL for production PostgreSQL connections (required by RDS)
+const isProduction = process.env.NODE_ENV === "production";
+
 function createPrismaClient() {
   const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
     max: 10,
     idleTimeoutMillis: 30000,
     connectionTimeoutMillis: 2000,
+    ssl: isProduction ? { rejectUnauthorized: false } : false,
   });
   
   const adapter = new PrismaPg(pool);

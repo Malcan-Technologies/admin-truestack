@@ -5,6 +5,9 @@ const globalForDb = globalThis as unknown as {
   pool: Pool | undefined;
 };
 
+// Enable SSL for production PostgreSQL connections (required by RDS)
+const isProduction = process.env.NODE_ENV === "production";
+
 export const pool =
   globalForDb.pool ??
   new Pool({
@@ -12,6 +15,7 @@ export const pool =
     max: 10,
     idleTimeoutMillis: 30000,
     connectionTimeoutMillis: 2000,
+    ssl: isProduction ? { rejectUnauthorized: false } : false,
   });
 
 if (process.env.NODE_ENV !== "production") globalForDb.pool = pool;
