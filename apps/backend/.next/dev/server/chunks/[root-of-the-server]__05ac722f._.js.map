@@ -1,6 +1,0 @@
-{
-  "version": 3,
-  "sources": [],
-  "sections": [
-    {"offset": {"line": 46, "column": 0}, "map": {"version":3,"sources":["file:///Users/ivan/Documents/truestack/admin-truestack/apps/backend/app/api/health/route.ts"],"sourcesContent":["import { NextResponse } from \"next/server\";\n\nexport async function GET() {\n  return NextResponse.json({ status: \"ok\", timestamp: new Date().toISOString() });\n}\n"],"names":[],"mappings":";;;;AAAA;;AAEO,eAAe;IACpB,OAAO,iTAAY,CAAC,IAAI,CAAC;QAAE,QAAQ;QAAM,WAAW,IAAI,OAAO,WAAW;IAAG;AAC/E"}}]
-}
