@@ -3,7 +3,9 @@ import { NextRequest, NextResponse } from "next/server";
 // Allowed origins for CORS (admin app)
 const allowedOrigins = [
   "http://localhost:3002", // Admin app local dev
-  process.env.ADMIN_APP_URL, // Admin app in production
+  "https://admin.truestack.my", // Admin app in production
+  "https://core.truestack.my", // Core app in production
+  process.env.ADMIN_APP_URL, // Additional admin app URL if configured
 ].filter(Boolean) as string[];
 
 // Next.js 16 proxy - handles CORS for cross-origin auth requests

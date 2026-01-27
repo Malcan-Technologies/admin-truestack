@@ -155,11 +155,33 @@ jobs:
       contents: read
 
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push migrations image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          echo "🔨 Building migrations image..."
+          docker build -f Dockerfile.migrations \
+            -t $ECR_REGISTRY/$ECR_REPOSITORY_BACKEND:$IMAGE_TAG-migrations \
+            -t $ECR_REGISTRY/$ECR_REPOSITORY_BACKEND:latest-migrations .
+          
+          echo "📤 Pushing migrations image..."
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY_BACKEND:$IMAGE_TAG-migrations
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY_BACKEND:latest-migrations
+          echo "✅ Migrations image pushed successfully"
 
       - name: Determine operation type
         id: operation
@@ -180,9 +202,20 @@ jobs:
             echo "run_seed=false" >> $GITHUB_OUTPUT
           fi
           
-          echo "📋 Operation: $ACTION"
-          echo "   Run migrations: $([ '$ACTION' == 'db-migrate' ] || [ '$ACTION' == 'db-migrate-and-seed' ] || [ '$ACTION' == 'full' ] && echo 'yes' || echo 'no')"
-          echo "   Run seed: $([ '$ACTION' == 'db-seed' ] || [ '$ACTION' == 'db-migrate-and-seed' ] && echo 'yes' || echo 'no')"
+          echo "=========================================="
+          echo "📋 Database Operation: $ACTION"
+          echo "=========================================="
+          if [ "$ACTION" == "db-migrate" ] || [ "$ACTION" == "db-migrate-and-seed" ] || [ "$ACTION" == "full" ]; then
+            echo "   ✅ Will run Prisma migrations"
+          else
+            echo "   ⏭️  Skipping migrations"
+          fi
+          if [ "$ACTION" == "db-seed" ] || [ "$ACTION" == "db-migrate-and-seed" ]; then
+            echo "   ✅ Will run database seed"
+          else
+            echo "   ⏭️  Skipping seed"
+          fi
+          echo "=========================================="
 
       - name: Run database task
         id: run-db-task
@@ -249,8 +282,12 @@ jobs:
       - name: Wait for database task to complete
         run: |
           TASK_ARN="${{ steps.run-db-task.outputs.task_arn }}"
+          TASK_ID=$(echo $TASK_ARN | awk -F'/' '{print $NF}')
           
-          echo "Waiting for database task to complete..."
+          echo "=========================================="
+          echo "⏳ Waiting for database task to complete..."
+          echo "   Task ID: $TASK_ID"
+          echo "=========================================="
           
           # Wait for task to complete (max 5 minutes)
           for i in {1..30}; do
@@ -260,7 +297,7 @@ jobs:
               --query 'tasks[0].lastStatus' \
               --output text)
             
-            echo "  Status: $STATUS"
+            echo "  [$i/30] Status: $STATUS"
             
             if [ "$STATUS" == "STOPPED" ]; then
               # Check exit code
@@ -269,6 +306,24 @@ jobs:
                 --tasks $TASK_ARN \
                 --query 'tasks[0].containers[0].exitCode' \
                 --output text)
+              
+              echo ""
+              echo "=========================================="
+              echo "📋 Task Completed - Fetching Logs"
+              echo "=========================================="
+              
+              # Always try to get logs
+              echo ""
+              echo "📜 Container Logs:"
+              echo "------------------------------------------"
+              aws logs get-log-events \
+                --log-group-name "/ecs/trueidentity-prod-backend" \
+                --log-stream-name "migrations/migrations/$TASK_ID" \
+                --limit 100 \
+                --query 'events[*].message' \
+                --output text 2>/dev/null || echo "(No logs available yet)"
+              echo "------------------------------------------"
+              echo ""
               
               # If no exit code, the container never started - get the failure reason
               if [ "$EXIT_CODE" == "None" ] || [ -z "$EXIT_CODE" ]; then
@@ -292,10 +347,38 @@ jobs:
               fi
               
               if [ "$EXIT_CODE" == "0" ]; then
-                echo "✅ Database operation completed successfully!"
+                echo "=========================================="
+                echo "✅ DATABASE OPERATION COMPLETED SUCCESSFULLY!"
+                echo "=========================================="
+                
+                # Show operation summary
+                RUN_MIGRATIONS="${{ steps.operation.outputs.run_migrations }}"
+                RUN_SEED="${{ steps.operation.outputs.run_seed }}"
+                
+                if [ "$RUN_MIGRATIONS" == "true" ]; then
+                  echo "   ✅ Migrations: PASSED"
+                fi
+                if [ "$RUN_SEED" == "true" ]; then
+                  echo "   ✅ Seed: PASSED"
+                fi
+                echo "=========================================="
                 exit 0
               else
-                echo "❌ Database operation failed with exit code: $EXIT_CODE"
+                echo "=========================================="
+                echo "❌ DATABASE OPERATION FAILED"
+                echo "=========================================="
+                echo "Exit code: $EXIT_CODE"
+                
+                # Show operation summary
+                RUN_MIGRATIONS="${{ steps.operation.outputs.run_migrations }}"
+                RUN_SEED="${{ steps.operation.outputs.run_seed }}"
+                
+                if [ "$RUN_MIGRATIONS" == "true" ]; then
+                  echo "   ❌ Migrations: FAILED"
+                fi
+                if [ "$RUN_SEED" == "true" ]; then
+                  echo "   ❌ Seed: FAILED (or not reached)"
+                fi
                 
                 # Get stopped reason
                 STOPPED_REASON=$(aws ecs describe-tasks \
@@ -303,6 +386,7 @@ jobs:
                   --tasks $TASK_ARN \
                   --query 'tasks[0].stoppedReason' \
                   --output text)
+                echo ""
                 echo "Stopped reason: $STOPPED_REASON"
                 
                 # Get container reason if available
@@ -311,17 +395,10 @@ jobs:
                   --tasks $TASK_ARN \
                   --query 'tasks[0].containers[0].reason' \
                   --output text)
-                echo "Container reason: $CONTAINER_REASON"
-                
-                # Get logs
-                TASK_ID=$(echo $TASK_ARN | awk -F'/' '{print $NF}')
-                echo "Fetching logs..."
-                aws logs get-log-events \
-                  --log-group-name "/ecs/trueidentity-prod-backend" \
-                  --log-stream-name "migrations/migrations/$TASK_ID" \
-                  --limit 50 \
-                  --query 'events[*].message' \
-                  --output text || true
+                if [ "$CONTAINER_REASON" != "None" ]; then
+                  echo "Container reason: $CONTAINER_REASON"
+                fi
+                echo "=========================================="
                 
                 exit 1
               fi
@@ -330,7 +407,11 @@ jobs:
             sleep 10
           done
           
-          echo "❌ Database task timed out"
+          echo "=========================================="
+          echo "❌ DATABASE TASK TIMED OUT"
+          echo "=========================================="
+          echo "Task did not complete within 5 minutes."
+          echo "Check AWS ECS console for more details."
           exit 1
 
   deploy-backend:
