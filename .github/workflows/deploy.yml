@@ -31,10 +31,25 @@ jobs:
     outputs:
       image: ${{ steps.build-image.outputs.image }}
       migrations_image: ${{ steps.build-migrations.outputs.image }}
+      has_migration_changes: ${{ steps.check-migrations.outputs.has_changes }}
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Check for migration changes
+        id: check-migrations
+        run: |
+          # Check if prisma/ folder has changes compared to previous commit
+          if git diff --name-only HEAD~1 HEAD | grep -q "^prisma/"; then
+            echo "has_changes=true" >> $GITHUB_OUTPUT
+            echo "📦 Prisma migration files changed - will run migrations"
+          else
+            echo "has_changes=false" >> $GITHUB_OUTPUT
+            echo "⏭️ No migration changes detected - will skip migrations"
+          fi
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -60,6 +75,7 @@ jobs:
 
       - name: Build and push migrations image
         id: build-migrations
+        if: steps.check-migrations.outputs.has_changes == 'true'
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           IMAGE_TAG: ${{ github.sha }}
@@ -74,7 +90,7 @@ jobs:
     name: Run Migrations
     runs-on: ubuntu-latest
     needs: build
-    if: ${{ github.event.inputs.skip_migrations != 'true' }}
+    if: ${{ github.event.inputs.skip_migrations != 'true' && needs.build.outputs.has_migration_changes == 'true' }}
     environment: production
     
     permissions:

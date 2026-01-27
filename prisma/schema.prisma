@@ -1,0 +1,288 @@
+// TrueIdentity Admin - Prisma Schema
+// This schema mirrors the existing database structure
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../node_modules/.prisma/client"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ============================================
+// BetterAuth Tables (Admin Users)
+// ============================================
+
+model User {
+  id            String    @id
+  name          String
+  email         String    @unique
+  emailVerified Boolean   @default(false) @map("email_verified")
+  image         String?
+  role          String    @default("ops") // super_admin, ops, finance
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @default(now()) @updatedAt @map("updated_at")
+
+  // Relations
+  sessions              Session[]
+  accounts              Account[]
+  clientsCreated        Client[]           @relation("ClientCreatedBy")
+  apiKeysCreated        ClientApiKey[]     @relation("ApiKeyCreatedBy")
+  apiKeysRevoked        ClientApiKey[]     @relation("ApiKeyRevokedBy")
+  creditLedgerEntries   CreditLedger[]
+
+  @@map("user")
+}
+
+model Session {
+  id        String   @id
+  userId    String   @map("user_id")
+  token     String   @unique
+  expiresAt DateTime @map("expires_at")
+  ipAddress String?  @map("ip_address")
+  userAgent String?  @map("user_agent")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([token])
+  @@index([expiresAt])
+  @@map("session")
+}
+
+model Account {
+  id                   String    @id
+  userId               String    @map("user_id")
+  accountId            String    @map("account_id")
+  providerId           String    @map("provider_id")
+  accessToken          String?   @map("access_token")
+  refreshToken         String?   @map("refresh_token")
+  accessTokenExpiresAt DateTime? @map("access_token_expires_at")
+  refreshTokenExpiresAt DateTime? @map("refresh_token_expires_at")
+  scope                String?
+  idToken              String?   @map("id_token")
+  password             String?   // hashed password
+  createdAt            DateTime  @default(now()) @map("created_at")
+  updatedAt            DateTime  @default(now()) @updatedAt @map("updated_at")
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("account")
+}
+
+model Verification {
+  id         String   @id
+  identifier String
+  value      String
+  expiresAt  DateTime @map("expires_at")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@index([identifier])
+  @@map("verification")
+}
+
+// ============================================
+// Products Table
+// ============================================
+
+model Product {
+  id          String   @id // 'true_identity', 'true_payments', etc.
+  name        String
+  description String?
+  keyPrefix   String   @unique @map("key_prefix") // 'ti' for TrueIdentity
+  status      String   @default("active")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  // Relations
+  clientApiKeys        ClientApiKey[]
+  clientProductConfigs ClientProductConfig[]
+  creditLedgerEntries  CreditLedger[]
+
+  @@map("product")
+}
+
+// ============================================
+// Clients (B2B Customers)
+// ============================================
+
+model Client {
+  id                  String   @id @default(uuid()) @db.Uuid
+  name                String
+  code                String   @unique // e.g., 'ACME'
+  contactEmail        String?  @map("contact_email")
+  contactPhone        String?  @map("contact_phone")
+  companyRegistration String?  @map("company_registration") // SSM number
+  status              String   @default("active") // active, suspended
+  notes               String?
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @default(now()) @updatedAt @map("updated_at")
+  createdBy           String?  @map("created_by")
+
+  // Relations
+  createdByUser        User?                 @relation("ClientCreatedBy", fields: [createdBy], references: [id])
+  apiKeys              ClientApiKey[]
+  productConfigs       ClientProductConfig[]
+  creditLedgerEntries  CreditLedger[]
+  kycSessions          KycSession[]
+
+  @@index([code])
+  @@index([status])
+  @@map("client")
+}
+
+// ============================================
+// Client API Keys
+// ============================================
+
+model ClientApiKey {
+  id              String    @id @default(uuid()) @db.Uuid
+  clientId        String    @map("client_id") @db.Uuid
+  productId       String    @map("product_id")
+  apiKeyHash      String    @map("api_key_hash") // SHA256 hash
+  apiKeyEncrypted String    @map("api_key_encrypted") // AES-GCM encrypted
+  apiKeyPrefix    String    @map("api_key_prefix") // 'ti_live_abc1'
+  apiKeySuffix    String    @map("api_key_suffix") // last 4 chars
+  environment     String    @default("live") // 'live' or 'test'
+  status          String    @default("active") // active, revoked
+  revokedAt       DateTime? @map("revoked_at")
+  revokedBy       String?   @map("revoked_by")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  createdBy       String?   @map("created_by")
+
+  // Relations
+  client        Client  @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  product       Product @relation(fields: [productId], references: [id])
+  createdByUser User?   @relation("ApiKeyCreatedBy", fields: [createdBy], references: [id])
+  revokedByUser User?   @relation("ApiKeyRevokedBy", fields: [revokedBy], references: [id])
+
+  // Note: The partial unique index (WHERE status = 'active') is managed in raw SQL
+  // Prisma doesn't support partial indexes, so we handle this at application level
+  @@index([clientId])
+  @@index([apiKeyHash])
+  @@index([apiKeyPrefix])
+  @@map("client_api_key")
+}
+
+// ============================================
+// Client Product Settings
+// ============================================
+
+model ClientProductConfig {
+  id             String   @id @default(uuid()) @db.Uuid
+  clientId       String   @map("client_id") @db.Uuid
+  productId      String   @map("product_id")
+  enabled        Boolean  @default(true)
+  webhookUrl     String?  @map("webhook_url")
+  successUrl     String?  @map("success_url")
+  failUrl        String?  @map("fail_url")
+  allowOverdraft Boolean  @default(false) @map("allow_overdraft")
+  settings       Json     @default("{}")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @default(now()) @updatedAt @map("updated_at")
+
+  // Relations
+  client  Client  @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id])
+
+  @@unique([clientId, productId])
+  @@index([clientId, productId])
+  @@map("client_product_config")
+}
+
+// ============================================
+// Credit Ledger
+// ============================================
+
+model CreditLedger {
+  id           String   @id @default(uuid()) @db.Uuid
+  clientId     String   @map("client_id") @db.Uuid
+  productId    String   @map("product_id")
+  amount       Int      // positive = credit, negative = debit
+  balanceAfter Int      @map("balance_after")
+  type         String   // topup, usage, adjustment, refund
+  referenceId  String?  @map("reference_id") @db.Uuid // kyc_session_id for usage
+  description  String?
+  createdAt    DateTime @default(now()) @map("created_at")
+  createdBy    String?  @map("created_by")
+
+  // Relations
+  client        Client  @relation(fields: [clientId], references: [id])
+  product       Product @relation(fields: [productId], references: [id])
+  createdByUser User?   @relation(fields: [createdBy], references: [id])
+
+  @@index([clientId, productId])
+  @@index([createdAt])
+  @@map("credit_ledger")
+}
+
+// ============================================
+// KYC Sessions
+// ============================================
+
+model KycSession {
+  id                   String    @id @default(uuid()) @db.Uuid
+  clientId             String    @map("client_id") @db.Uuid
+  refId                String    @unique @map("ref_id")
+  innovatifOnboardingId String?  @map("innovatif_onboarding_id")
+  status               String    @default("pending") // pending, processing, completed, expired
+  result               String?   // approved, rejected, null
+  rejectMessage        String?   @map("reject_message")
+  documentName         String    @map("document_name")
+  documentNumber       String    @map("document_number")
+  documentType         String    @default("1") @map("document_type") // 1=MyKad
+  platform             String    @default("Web")
+  successUrl           String?   @map("success_url")
+  failUrl              String?   @map("fail_url")
+  metadata             Json      @default("{}")
+  innovatifResponse    Json?     @map("innovatif_response")
+  s3FrontDocument      String?   @map("s3_front_document")
+  s3BackDocument       String?   @map("s3_back_document")
+  s3FaceImage          String?   @map("s3_face_image")
+  s3BestFrame          String?   @map("s3_best_frame")
+  webhookDelivered     Boolean   @default(false) @map("webhook_delivered")
+  webhookDeliveredAt   DateTime? @map("webhook_delivered_at")
+  webhookAttempts      Int       @default(0) @map("webhook_attempts")
+  webhookLastError     String?   @map("webhook_last_error")
+  expiresAt            DateTime? @map("expires_at")
+  createdAt            DateTime  @default(now()) @map("created_at")
+  updatedAt            DateTime  @default(now()) @updatedAt @map("updated_at")
+
+  // Relations
+  client      Client       @relation(fields: [clientId], references: [id])
+  webhookLogs WebhookLog[]
+
+  @@index([clientId])
+  @@index([refId])
+  @@index([innovatifOnboardingId])
+  @@index([status])
+  @@index([createdAt])
+  @@map("kyc_session")
+}
+
+// ============================================
+// Webhook Delivery Log
+// ============================================
+
+model WebhookLog {
+  id           String   @id @default(uuid()) @db.Uuid
+  kycSessionId String   @map("kyc_session_id") @db.Uuid
+  source       String   // innovatif_callback, manual_retry
+  payloadHash  String   @map("payload_hash") // SHA256 for deduplication
+  processed    Boolean  @default(false)
+  errorMessage String?  @map("error_message")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  // Relations
+  kycSession KycSession @relation(fields: [kycSessionId], references: [id])
+
+  @@index([kycSessionId])
+  @@index([payloadHash])
+  @@map("webhook_log")
+}
