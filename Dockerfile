@@ -22,6 +22,8 @@ COPY . .
 
 # Build the application
 ENV NEXT_TELEMETRY_DISABLED=1
+# Provide dummy secret for build (real secret is provided at runtime)
+ENV BETTER_AUTH_SECRET=build-time-placeholder-not-used-at-runtime
 RUN pnpm build
 
 # Production stage
