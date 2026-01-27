@@ -77,12 +77,12 @@ RUN adduser --system --uid 1001 nextjs
 # Copy built admin app standalone
 COPY --from=builder-admin --chown=nextjs:nodejs /app/apps/admin/.next/standalone ./admin/
 COPY --from=builder-admin --chown=nextjs:nodejs /app/apps/admin/.next/static ./admin/apps/admin/.next/static
-COPY --from=builder-admin /app/apps/admin/public ./admin/apps/admin/public
+COPY --from=builder-admin --chown=nextjs:nodejs /app/apps/admin/public ./admin/apps/admin/public
 
 # Copy built core app standalone
 COPY --from=builder-core --chown=nextjs:nodejs /app/apps/core/.next/standalone ./core/
 COPY --from=builder-core --chown=nextjs:nodejs /app/apps/core/.next/static ./core/apps/core/.next/static
-COPY --from=builder-core /app/apps/core/public ./core/apps/core/public
+COPY --from=builder-core --chown=nextjs:nodejs /app/apps/core/public ./core/apps/core/public
 
 # Copy the multi-app server
 COPY apps/frontend/server.js ./server.js
