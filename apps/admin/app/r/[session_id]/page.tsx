@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { queryOne } from "@/lib/db";
+import { queryOne } from "@truestack/shared/db";
 
 interface SessionData {
   id: string;
