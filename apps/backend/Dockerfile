@@ -55,7 +55,8 @@ RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
 
 # Copy built assets from backend app
-COPY --from=builder /app/apps/backend/public ./public
+# Note: public folder may not exist for API-only backends, so we create it first
+RUN mkdir -p ./public
 COPY --from=builder --chown=nextjs:nodejs /app/apps/backend/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/apps/backend/.next/static ./apps/backend/.next/static
 

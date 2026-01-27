@@ -1,16 +1,17 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import {
   LayoutDashboard,
   Users,
-  UserPlus,
   FileCheck,
   BarChart3,
   Settings,
   LogOut,
   ChevronDown,
+  Fingerprint,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { signOut } from "@/lib/auth-client";
@@ -26,6 +27,7 @@ interface NavSection {
   title: string;
   items: NavItem[];
   collapsible?: boolean;
+  icon?: React.ComponentType<{ className?: string }>;
 }
 
 const navSections: NavSection[] = [
@@ -39,12 +41,12 @@ const navSections: NavSection[] = [
     title: "CLIENTS",
     items: [
       { title: "All Clients", href: "/clients", icon: Users },
-      { title: "New Client", href: "/clients/new", icon: UserPlus },
     ],
   },
   {
     title: "TRUEIDENTITY",
     collapsible: true,
+    icon: Fingerprint,
     items: [
       { title: "Sessions", href: "/true-identity/sessions", icon: FileCheck },
       { title: "Usage", href: "/true-identity/usage", icon: BarChart3 },
@@ -72,13 +74,16 @@ export function Sidebar() {
     <aside className="fixed left-0 top-0 z-40 h-screen w-64 border-r border-slate-800 bg-slate-950">
       {/* Logo */}
       <div className="flex h-16 items-center border-b border-slate-800 px-6">
-        <Link href="/" className="flex items-center gap-2">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-indigo-500 to-violet-500">
-            <span className="text-sm font-bold text-white">T</span>
-          </div>
-          <span className="font-display text-lg font-semibold text-white">
-            Admin
-          </span>
+        <Link href="/clients" className="flex items-center gap-3">
+          <Image
+            src="/truestack-white.svg"
+            alt="TrueStack"
+            width={120}
+            height={32}
+            className="h-7 w-auto"
+            priority
+          />
+          <span className="text-sm font-medium text-slate-400">Admin</span>
         </Link>
       </div>
 
@@ -95,7 +100,10 @@ export function Sidebar() {
                     section.collapsible && "cursor-pointer hover:text-slate-400"
                   )}
                 >
-                  <span>{section.title}</span>
+                  <span className="flex items-center gap-2">
+                    {section.icon && <section.icon className="h-4 w-4" />}
+                    {section.title}
+                  </span>
                   {section.collapsible && (
                     <ChevronDown
                       className={cn(

@@ -1,16 +1,53 @@
 import Link from "next/link";
+import { headers } from "next/headers";
 import { notFound } from "next/navigation";
-import { PageHeader } from "@/components/layout/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ArrowLeft, Key, CreditCard, FileCheck, Settings } from "lucide-react";
 
-// Mock data - in production this would be fetched from database
-async function getClient(id: string) {
-  // TODO: Fetch from database
-  return null;
+export const dynamic = "force-dynamic";
+
+type Client = {
+  id: string;
+  name: string;
+  code: string;
+  status: "active" | "suspended";
+  contact_email: string | null;
+  contact_phone: string | null;
+  company_registration: string | null;
+  notes: string | null;
+  created_at: string;
+  creditBalance: number;
+  sessionsCount: number;
+};
+
+async function getClient(id: string): Promise<Client | null> {
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+  const headersList = await headers();
+
+  try {
+    const response = await fetch(`${apiUrl}/api/admin/clients/${id}`, {
+      headers: {
+        cookie: headersList.get("cookie") || "",
+      },
+      cache: "no-store",
+    });
+
+    if (!response.ok) {
+      if (response.status === 404) {
+        return null;
+      }
+      console.error("Failed to fetch client:", response.status);
+      return null;
+    }
+
+    return response.json();
+  } catch (error) {
+    console.error("Error fetching client:", error);
+    return null;
+  }
 }
 
 export default async function ClientDetailPage({
@@ -21,20 +58,9 @@ export default async function ClientDetailPage({
   const { id } = await params;
   const client = await getClient(id);
 
-  // For now, show a placeholder since we don't have database connected
-  const mockClient = {
-    id,
-    name: "Example Client",
-    code: "EXAMPLE",
-    status: "active" as const,
-    contactEmail: "contact@example.com",
-    contactPhone: "+60123456789",
-    companyRegistration: "123456-X",
-    notes: "",
-    createdAt: new Date().toISOString(),
-    creditBalance: 0,
-    sessionsCount: 0,
-  };
+  if (!client) {
+    notFound();
+  }
 
   return (
     <div>
@@ -52,25 +78,25 @@ export default async function ClientDetailPage({
         <div>
           <div className="flex items-center gap-3">
             <h1 className="font-display text-3xl font-semibold tracking-tight text-white md:text-4xl">
-              {mockClient.name}
+              {client.name}
             </h1>
             <Badge
               variant="outline"
               className={
-                mockClient.status === "active"
+                client.status === "active"
                   ? "border-green-500/30 bg-green-500/10 text-green-400"
                   : "border-red-500/30 bg-red-500/10 text-red-400"
               }
             >
-              {mockClient.status}
+              {client.status}
             </Badge>
           </div>
           <p className="mt-2 text-slate-400">
             <code className="rounded bg-slate-800 px-1.5 py-0.5 font-mono text-sm">
-              {mockClient.code}
+              {client.code}
             </code>
             <span className="mx-2">•</span>
-            Created {new Date(mockClient.createdAt).toLocaleDateString()}
+            Created {new Date(client.created_at).toLocaleDateString()}
           </p>
         </div>
         <Button
@@ -122,16 +148,22 @@ export default async function ClientDetailPage({
               <CardContent className="space-y-4">
                 <div>
                   <p className="text-sm text-slate-400">Email</p>
-                  <p className="text-white">{mockClient.contactEmail || "Not provided"}</p>
+                  <p className="text-white">{client.contact_email || "Not provided"}</p>
                 </div>
                 <div>
                   <p className="text-sm text-slate-400">Phone</p>
-                  <p className="text-white">{mockClient.contactPhone || "Not provided"}</p>
+                  <p className="text-white">{client.contact_phone || "Not provided"}</p>
                 </div>
                 <div>
                   <p className="text-sm text-slate-400">Company Registration</p>
-                  <p className="text-white">{mockClient.companyRegistration || "Not provided"}</p>
+                  <p className="text-white">{client.company_registration || "Not provided"}</p>
                 </div>
+                {client.notes && (
+                  <div>
+                    <p className="text-sm text-slate-400">Internal Notes</p>
+                    <p className="text-white">{client.notes}</p>
+                  </div>
+                )}
               </CardContent>
             </Card>
 
@@ -143,13 +175,13 @@ export default async function ClientDetailPage({
                 <div className="flex items-center justify-between">
                   <span className="text-slate-400">Credit Balance</span>
                   <span className="text-2xl font-semibold text-white">
-                    {mockClient.creditBalance.toLocaleString()}
+                    {Number(client.creditBalance || 0).toLocaleString()}
                   </span>
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-slate-400">Total Sessions</span>
                   <span className="text-2xl font-semibold text-white">
-                    {mockClient.sessionsCount.toLocaleString()}
+                    {Number(client.sessionsCount || 0).toLocaleString()}
                   </span>
                 </div>
               </CardContent>
