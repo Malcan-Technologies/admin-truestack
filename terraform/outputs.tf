@@ -15,9 +15,14 @@ output "ecs_cluster_name" {
   value       = module.ecs.cluster_name
 }
 
-output "ecs_service_name" {
-  description = "ECS service name"
-  value       = module.ecs.service_name
+output "ecs_backend_service_name" {
+  description = "ECS backend service name"
+  value       = module.ecs.backend_service_name
+}
+
+output "ecs_frontend_service_name" {
+  description = "ECS frontend service name"
+  value       = module.ecs.frontend_service_name
 }
 
 output "migration_task_definition" {
@@ -48,20 +53,25 @@ output "run_migrations_command" {
 }
 
 output "ecr_push_commands" {
-  description = "Commands to push Docker image to ECR"
+  description = "Commands to push Docker images to ECR"
   value = <<-EOT
     # Login to ECR
-    aws ecr get-login-password --region ap-southeast-5 | docker login --username AWS --password-stdin ${var.ecr_repository_url}
+    aws ecr get-login-password --region ap-southeast-5 | docker login --username AWS --password-stdin ${var.backend_ecr_repository_url}
     
-    # Build and push app
-    docker build -t ${var.project_name} .
-    docker tag ${var.project_name}:latest ${var.ecr_repository_url}:latest
-    docker push ${var.ecr_repository_url}:latest
+    # Build and push backend
+    docker build -f apps/backend/Dockerfile -t ${var.project_name}-backend .
+    docker tag ${var.project_name}-backend:latest ${var.backend_ecr_repository_url}:latest
+    docker push ${var.backend_ecr_repository_url}:latest
+    
+    # Build and push frontend
+    docker build -f apps/frontend/Dockerfile -t ${var.project_name}-frontend .
+    docker tag ${var.project_name}-frontend:latest ${var.frontend_ecr_repository_url}:latest
+    docker push ${var.frontend_ecr_repository_url}:latest
     
     # Build and push migrations
     docker build -f Dockerfile.migrations -t ${var.project_name}-migrations .
-    docker tag ${var.project_name}-migrations:latest ${var.ecr_repository_url}:latest-migrations
-    docker push ${var.ecr_repository_url}:latest-migrations
+    docker tag ${var.project_name}-migrations:latest ${var.backend_ecr_repository_url}:latest-migrations
+    docker push ${var.backend_ecr_repository_url}:latest-migrations
   EOT
 }
 
@@ -72,5 +82,7 @@ output "dns_records" {
     
     admin.${var.domain_name} -> ${module.alb.dns_name}
     api.${var.domain_name}   -> ${module.alb.dns_name}
+    ${var.core_domain}       -> ${module.alb.dns_name}
   EOT
 }
+

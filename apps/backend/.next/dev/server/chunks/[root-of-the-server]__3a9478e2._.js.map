@@ -1,0 +1,6 @@
+{
+  "version": 3,
+  "sources": [],
+  "sections": [
+    {"offset": {"line": 46, "column": 0}, "map": {"version":3,"sources":["file:///Users/ivan/Documents/truestack/admin-truestack/proxy.ts"],"sourcesContent":["import { NextRequest, NextResponse } from \"next/server\";\n\n// Proxy is now only for routing concerns (rewrites, redirects, headers)\n// Authentication is handled in server layouts per Next.js 16 best practices\nexport function proxy(request: NextRequest) {\n  // Allow all requests to pass through\n  // Auth is handled in the (dashboard) layout\n  return NextResponse.next();\n}\n\nexport const config = {\n  matcher: [\n    /*\n     * Match all request paths except for the ones starting with:\n     * - _next/static (static files)\n     * - _next/image (image optimization files)\n     * - favicon.ico (favicon file)\n     * - public folder\n     */\n    \"/((?!_next/static|_next/image|favicon.ico|.*\\\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)\",\n  ],\n};\n"],"names":[],"mappings":";;;;;;AAAA;;AAIO,SAAS,MAAM,OAAoB;IACxC,qCAAqC;IACrC,4CAA4C;IAC5C,OAAO,+SAAY,CAAC,IAAI;AAC1B;AAEO,MAAM,SAAS;IACpB,SAAS;QACP;;;;;;KAMC,GACD;KACD;AACH"}}]
+}

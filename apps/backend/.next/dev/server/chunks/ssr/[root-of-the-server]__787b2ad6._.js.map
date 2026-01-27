@@ -1,0 +1,6 @@
+{
+  "version": 3,
+  "sources": [],
+  "sections": [
+    {"offset": {"line": 14, "column": 0}, "map": {"version":3,"sources":["file:///Users/ivan/Documents/truestack/admin-truestack/apps/backend/app/page.tsx"],"sourcesContent":["import { redirect } from \"next/navigation\";\n\nexport default function Home() {\n  // Backend app doesn't serve web pages, redirect to health endpoint\n  redirect(\"/api/health\");\n}\n"],"names":[],"mappings":";;;;AAAA;AAAA;;AAEe,SAAS;IACtB,mEAAmE;IACnE,IAAA,kWAAQ,EAAC;AACX"}}]
+}

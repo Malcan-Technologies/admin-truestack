@@ -1,0 +1,36 @@
+{
+  "name": "@truestack/shared",
+  "version": "0.1.0",
+  "private": true,
+  "main": "./lib/index.ts",
+  "types": "./lib/index.ts",
+  "exports": {
+    ".": "./lib/index.ts",
+    "./prisma": "./lib/prisma.ts",
+    "./db": "./lib/db.ts",
+    "./api-keys": "./lib/api-keys.ts",
+    "./innovatif": "./lib/innovatif.ts",
+    "./s3": "./lib/s3.ts",
+    "./types": "./types/index.ts"
+  },
+  "scripts": {
+    "db:generate": "prisma generate",
+    "db:migrate": "prisma migrate deploy",
+    "db:migrate:dev": "prisma migrate dev",
+    "db:push": "prisma db push",
+    "db:studio": "prisma studio",
+    "db:seed": "tsx prisma/seed.ts"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.975.0",
+    "@prisma/adapter-pg": "^7.3.0",
+    "@prisma/client": "7.3.0",
+    "pg": "^8.17.2"
+  },
+  "devDependencies": {
+    "@types/pg": "^8.16.0",
+    "prisma": "7.3.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5"
+  }
+}

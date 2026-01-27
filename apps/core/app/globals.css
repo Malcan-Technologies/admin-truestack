@@ -1,0 +1,80 @@
+@import "tailwindcss";
+
+:root {
+  --background: #020617;
+  --foreground: #f8fafc;
+  --slate-50: #f8fafc;
+  --slate-200: #e2e8f0;
+  --slate-400: #94a3b8;
+  --slate-500: #64748b;
+  --slate-700: #334155;
+  --slate-800: #1e293b;
+  --slate-900: #0f172a;
+  --slate-950: #020617;
+  --indigo-400: #818cf8;
+  --indigo-500: #6366f1;
+  --indigo-600: #4f46e5;
+  --violet-400: #a78bfa;
+  --violet-500: #8b5cf6;
+  --purple-400: #c084fc;
+  --green-400: #4ade80;
+  --green-500: #22c55e;
+}
+
+body {
+  color: var(--foreground);
+  background: var(--background);
+  font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+/* Code block styling */
+.code-block {
+  background: var(--slate-900);
+  border: 1px solid var(--slate-800);
+  border-radius: 0.75rem;
+  overflow: hidden;
+}
+
+.code-block pre {
+  margin: 0;
+  padding: 1.25rem;
+  overflow-x: auto;
+  font-family: 'Geist Mono', 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 0.875rem;
+  line-height: 1.7;
+}
+
+.code-header {
+  background: var(--slate-800);
+  padding: 0.75rem 1.25rem;
+  border-bottom: 1px solid var(--slate-700);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.code-header span {
+  color: var(--slate-400);
+  font-size: 0.75rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* VSCode Dark+ inspired syntax highlighting */
+.token-keyword { color: #c586c0; }          /* Purple - keywords like const, import, await */
+.token-control { color: #c586c0; }          /* Purple - control flow */
+.token-string { color: #ce9178; }           /* Orange/Brown - strings */
+.token-comment { color: #6a9955; }          /* Green - comments */
+.token-property { color: #9cdcfe; }         /* Light blue - properties */
+.token-number { color: #b5cea8; }           /* Light green - numbers */
+.token-method { color: #dcdcaa; }           /* Yellow - function/method calls */
+.token-class { color: #4ec9b0; }            /* Teal - class names */
+.token-variable { color: #9cdcfe; }         /* Light blue - variables */
+.token-operator { color: #d4d4d4; }         /* White/Gray - operators */
+.token-punctuation { color: #d4d4d4; }      /* White/Gray - punctuation */
+.token-type { color: #4ec9b0; }             /* Teal - types */
+.token-boolean { color: #569cd6; }          /* Blue - true/false */
+.token-parameter { color: #9cdcfe; }        /* Light blue - parameters */
+.token-import { color: #c586c0; }           /* Purple - import/from */
+.token-url { color: #3fc1c9; }              /* Cyan - URLs */

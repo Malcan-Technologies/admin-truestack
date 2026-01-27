@@ -8,13 +8,14 @@ WORKDIR /app
 # Install pnpm and openssl (needed by Prisma)
 RUN corepack enable pnpm && apk add --no-cache openssl
 
-# Copy package files, prisma config, and prisma schema (needed for postinstall)
-COPY package.json pnpm-lock.yaml ./
-COPY prisma.config.mjs ./
-COPY prisma/ ./prisma/
+# Copy workspace files
+COPY pnpm-workspace.yaml package.json pnpm-lock.yaml ./
+COPY packages/shared/package.json ./packages/shared/
+COPY packages/shared/prisma.config.mjs ./packages/shared/
+COPY packages/shared/prisma/ ./packages/shared/prisma/
 
-# Install dependencies (postinstall will run prisma generate)
-RUN pnpm install --frozen-lockfile
+# Install dependencies for shared package
+RUN pnpm install --frozen-lockfile --filter @truestack/shared
 
 # Copy migration script
 COPY scripts/run-prisma-migrations.sh ./scripts/

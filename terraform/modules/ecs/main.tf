@@ -1,4 +1,4 @@
-# ECS Fargate Module
+# ECS Fargate Module - Backend + Frontend Services
 
 variable "project_name" {
   type = string
@@ -16,26 +16,29 @@ variable "private_subnet_ids" {
   type = list(string)
 }
 
-variable "alb_target_group_arn" {
-  type = string
-}
-
 variable "alb_security_group_id" {
   type = string
 }
 
-variable "ecr_repository_url" {
+variable "backend_target_group_arn" {
+  type = string
+}
+
+variable "frontend_target_group_arn" {
+  type = string
+}
+
+variable "backend_ecr_repository_url" {
+  type = string
+}
+
+variable "frontend_ecr_repository_url" {
   type = string
 }
 
 variable "image_tag" {
   type    = string
   default = "latest"
-}
-
-variable "database_url" {
-  type      = string
-  sensitive = true
 }
 
 variable "better_auth_url" {
@@ -58,9 +61,14 @@ variable "innovatif_base_url" {
   type = string
 }
 
-# CloudWatch Log Group
-resource "aws_cloudwatch_log_group" "app" {
-  name              = "/ecs/${var.project_name}-${var.environment}"
+# CloudWatch Log Groups
+resource "aws_cloudwatch_log_group" "backend" {
+  name              = "/ecs/${var.project_name}-${var.environment}-backend"
+  retention_in_days = 30
+}
+
+resource "aws_cloudwatch_log_group" "frontend" {
+  name              = "/ecs/${var.project_name}-${var.environment}-frontend"
   retention_in_days = 30
 }
 
@@ -186,9 +194,11 @@ resource "aws_security_group" "ecs" {
   }
 }
 
-# Task Definition
-resource "aws_ecs_task_definition" "app" {
-  family                   = "${var.project_name}-${var.environment}"
+# ============================================
+# Backend Task Definition
+# ============================================
+resource "aws_ecs_task_definition" "backend" {
+  family                   = "${var.project_name}-${var.environment}-backend"
   network_mode             = "awsvpc"
   requires_compatibilities = ["FARGATE"]
   cpu                      = 256
@@ -198,8 +208,8 @@ resource "aws_ecs_task_definition" "app" {
 
   container_definitions = jsonencode([
     {
-      name  = "app"
-      image = "${var.ecr_repository_url}:${var.image_tag}"
+      name  = "backend"
+      image = "${var.backend_ecr_repository_url}:${var.image_tag}"
 
       portMappings = [
         {
@@ -232,7 +242,7 @@ resource "aws_ecs_task_definition" "app" {
       logConfiguration = {
         logDriver = "awslogs"
         options = {
-          "awslogs-group"         = aws_cloudwatch_log_group.app.name
+          "awslogs-group"         = aws_cloudwatch_log_group.backend.name
           "awslogs-region"        = "ap-southeast-5"
           "awslogs-stream-prefix" = "ecs"
         }
@@ -243,17 +253,17 @@ resource "aws_ecs_task_definition" "app" {
         interval    = 30
         timeout     = 5
         retries     = 3
-        startPeriod = 60
+        startPeriod = 120
       }
     }
   ])
 }
 
-# ECS Service
-resource "aws_ecs_service" "app" {
-  name            = "${var.project_name}-${var.environment}"
+# Backend ECS Service
+resource "aws_ecs_service" "backend" {
+  name            = "${var.project_name}-${var.environment}-backend"
   cluster         = aws_ecs_cluster.main.id
-  task_definition = aws_ecs_task_definition.app.arn
+  task_definition = aws_ecs_task_definition.backend.arn
   desired_count   = 1
   launch_type     = "FARGATE"
 
@@ -264,8 +274,8 @@ resource "aws_ecs_service" "app" {
   }
 
   load_balancer {
-    target_group_arn = var.alb_target_group_arn
-    container_name   = "app"
+    target_group_arn = var.backend_target_group_arn
+    container_name   = "backend"
     container_port   = 3000
   }
 
@@ -273,6 +283,85 @@ resource "aws_ecs_service" "app" {
   deployment_minimum_healthy_percent = 100
 
   depends_on = [aws_iam_role_policy.s3_access]
+}
+
+# ============================================
+# Frontend Task Definition
+# ============================================
+resource "aws_ecs_task_definition" "frontend" {
+  family                   = "${var.project_name}-${var.environment}-frontend"
+  network_mode             = "awsvpc"
+  requires_compatibilities = ["FARGATE"]
+  cpu                      = 256
+  memory                   = 512
+  execution_role_arn       = aws_iam_role.ecs_execution.arn
+  task_role_arn            = aws_iam_role.ecs_task.arn
+
+  container_definitions = jsonencode([
+    {
+      name  = "frontend"
+      image = "${var.frontend_ecr_repository_url}:${var.image_tag}"
+
+      portMappings = [
+        {
+          containerPort = 3000
+          hostPort      = 3000
+          protocol      = "tcp"
+        }
+      ]
+
+      environment = [
+        { name = "NODE_ENV", value = "production" },
+        { name = "PORT", value = "3000" },
+        { name = "NEXT_PUBLIC_API_URL", value = var.better_auth_url },
+      ]
+
+      secrets = [
+        { name = "BETTER_AUTH_SECRET", valueFrom = "${var.secrets_arn}:better_auth_secret::" },
+      ]
+
+      logConfiguration = {
+        logDriver = "awslogs"
+        options = {
+          "awslogs-group"         = aws_cloudwatch_log_group.frontend.name
+          "awslogs-region"        = "ap-southeast-5"
+          "awslogs-stream-prefix" = "ecs"
+        }
+      }
+
+      healthCheck = {
+        command     = ["CMD-SHELL", "curl -f http://localhost:3000/health || exit 1"]
+        interval    = 30
+        timeout     = 5
+        retries     = 3
+        startPeriod = 120
+      }
+    }
+  ])
+}
+
+# Frontend ECS Service
+resource "aws_ecs_service" "frontend" {
+  name            = "${var.project_name}-${var.environment}-frontend"
+  cluster         = aws_ecs_cluster.main.id
+  task_definition = aws_ecs_task_definition.frontend.arn
+  desired_count   = 1
+  launch_type     = "FARGATE"
+
+  network_configuration {
+    subnets          = var.private_subnet_ids
+    security_groups  = [aws_security_group.ecs.id]
+    assign_public_ip = false
+  }
+
+  load_balancer {
+    target_group_arn = var.frontend_target_group_arn
+    container_name   = "frontend"
+    container_port   = 3000
+  }
+
+  deployment_maximum_percent         = 200
+  deployment_minimum_healthy_percent = 100
 }
 
 # ============================================
@@ -291,7 +380,7 @@ resource "aws_ecs_task_definition" "migrations" {
   container_definitions = jsonencode([
     {
       name      = "migrations"
-      image     = "${var.ecr_repository_url}:${var.image_tag}-migrations"
+      image     = "${var.backend_ecr_repository_url}:${var.image_tag}-migrations"
       essential = true
 
       environment = [
@@ -305,7 +394,7 @@ resource "aws_ecs_task_definition" "migrations" {
       logConfiguration = {
         logDriver = "awslogs"
         options = {
-          "awslogs-group"         = aws_cloudwatch_log_group.app.name
+          "awslogs-group"         = aws_cloudwatch_log_group.backend.name
           "awslogs-region"        = "ap-southeast-5"
           "awslogs-stream-prefix" = "migrations"
         }
@@ -323,8 +412,12 @@ output "cluster_arn" {
   value = aws_ecs_cluster.main.arn
 }
 
-output "service_name" {
-  value = aws_ecs_service.app.name
+output "backend_service_name" {
+  value = aws_ecs_service.backend.name
+}
+
+output "frontend_service_name" {
+  value = aws_ecs_service.frontend.name
 }
 
 output "security_group_id" {

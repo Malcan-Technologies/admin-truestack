@@ -25,11 +25,6 @@ variable "db_username" {
   sensitive = true
 }
 
-variable "db_password" {
-  type      = string
-  sensitive = true
-}
-
 # DB Subnet Group
 resource "aws_db_subnet_group" "main" {
   name       = "${var.project_name}-${var.environment}"
@@ -60,6 +55,8 @@ resource "aws_security_group" "rds" {
 }
 
 # RDS Instance
+# Note: For existing RDS, password is already set and managed via Secrets Manager
+# For new deployments, use manage_master_user_password = true
 resource "aws_db_instance" "main" {
   identifier = "${var.project_name}-${var.environment}"
 
@@ -77,8 +74,11 @@ resource "aws_db_instance" "main" {
   # Database
   db_name  = "trueidentity"
   username = var.db_username
-  password = var.db_password
   port     = 5432
+
+  # Password management - let AWS manage the master user password
+  # The password is stored in Secrets Manager automatically
+  manage_master_user_password = true
 
   # Network
   db_subnet_group_name   = aws_db_subnet_group.main.name
@@ -102,6 +102,11 @@ resource "aws_db_instance" "main" {
   # Apply changes immediately in non-prod
   apply_immediately = var.environment != "prod"
 
+  # Ignore password changes since it's managed by AWS
+  lifecycle {
+    ignore_changes = [password]
+  }
+
   tags = {
     Name = "${var.project_name}-${var.environment}"
   }
@@ -112,9 +117,15 @@ output "endpoint" {
   value = aws_db_instance.main.endpoint
 }
 
-output "connection_string" {
-  value     = "postgresql://${var.db_username}:${var.db_password}@${aws_db_instance.main.endpoint}/trueidentity"
-  sensitive = true
+output "db_name" {
+  value = aws_db_instance.main.db_name
+}
+
+# Note: Connection string is stored in the app's Secrets Manager secret
+# This output is only available if manage_master_user_password was enabled
+output "master_user_secret_arn" {
+  value       = length(aws_db_instance.main.master_user_secret) > 0 ? aws_db_instance.main.master_user_secret[0].secret_arn : null
+  description = "ARN of the secret containing the RDS master user credentials (null if not using managed password)"
 }
 
 output "security_group_id" {
