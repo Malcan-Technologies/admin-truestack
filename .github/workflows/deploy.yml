@@ -6,8 +6,17 @@ on:
       - main
   workflow_dispatch:
     inputs:
+      action:
+        description: 'What to do'
+        required: true
+        default: 'full'
+        type: choice
+        options:
+          - full
+          - deploy-only
+          - migrations-only
       skip_migrations:
-        description: 'Skip running migrations'
+        description: 'Skip migrations (for full deploy)'
         required: false
         default: false
         type: boolean
@@ -23,6 +32,8 @@ jobs:
     name: Build Docker Images
     runs-on: ubuntu-latest
     environment: production
+    # Skip build for deploy-only and migrations-only
+    if: ${{ github.event.inputs.action != 'deploy-only' && github.event.inputs.action != 'migrations-only' }}
     
     permissions:
       id-token: write
@@ -90,7 +101,16 @@ jobs:
     name: Run Migrations
     runs-on: ubuntu-latest
     needs: build
-    if: ${{ github.event.inputs.skip_migrations != 'true' && needs.build.outputs.has_migration_changes == 'true' }}
+    # Run if: migrations-only action, OR (full deploy with migration changes and not skipped)
+    if: |
+      always() && (
+        github.event.inputs.action == 'migrations-only' ||
+        (
+          github.event.inputs.action != 'deploy-only' &&
+          github.event.inputs.skip_migrations != 'true' &&
+          needs.build.outputs.has_migration_changes == 'true'
+        )
+      )
     environment: production
     
     permissions:
@@ -233,7 +253,12 @@ jobs:
     name: Deploy to ECS
     runs-on: ubuntu-latest
     needs: [build, migrate]
-    if: always() && needs.build.result == 'success' && (needs.migrate.result == 'success' || needs.migrate.result == 'skipped')
+    # Skip deploy for migrations-only action
+    if: |
+      always() &&
+      github.event.inputs.action != 'migrations-only' &&
+      (needs.build.result == 'success' || github.event.inputs.action == 'deploy-only') &&
+      (needs.migrate.result == 'success' || needs.migrate.result == 'skipped')
     environment: production
     
     permissions:
@@ -247,6 +272,25 @@ jobs:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
 
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Get image to deploy
+        id: get-image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+        run: |
+          if [ "${{ github.event.inputs.action }}" == "deploy-only" ]; then
+            # Use latest image for deploy-only
+            echo "image=$ECR_REGISTRY/${{ env.ECR_REPOSITORY }}:latest" >> $GITHUB_OUTPUT
+            echo "📦 Using latest image"
+          else
+            # Use newly built image
+            echo "image=${{ needs.build.outputs.image }}" >> $GITHUB_OUTPUT
+            echo "📦 Using newly built image: ${{ needs.build.outputs.image }}"
+          fi
+
       - name: Download current task definition
         run: |
           aws ecs describe-task-definition \
@@ -259,7 +303,7 @@ jobs:
         with:
           task-definition: task-definition.json
           container-name: app
-          image: ${{ needs.build.outputs.image }}
+          image: ${{ steps.get-image.outputs.image }}
 
       - name: Deploy to Amazon ECS
         uses: aws-actions/amazon-ecs-deploy-task-definition@v1
@@ -275,6 +319,7 @@ jobs:
           echo "✅ Deployment Complete!"
           echo "=========================================="
           echo ""
-          echo "App Image: ${{ needs.build.outputs.image }}"
+          echo "Action: ${{ github.event.inputs.action || 'full' }}"
+          echo "App Image: ${{ steps.get-image.outputs.image }}"
           echo "Migrations: ${{ needs.migrate.result }}"
           echo ""
