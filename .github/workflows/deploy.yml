@@ -20,6 +20,11 @@ on:
         required: false
         default: false
         type: boolean
+      run_seed:
+        description: 'Run database seed after migrations'
+        required: false
+        default: false
+        type: boolean
 
 env:
   AWS_REGION: ap-southeast-5
@@ -155,6 +160,14 @@ jobs:
           echo "Running migration task..."
           echo "  Cluster: ${{ env.ECS_CLUSTER }}"
           echo "  Task Definition: $TASK_DEF_ARN"
+          echo "  Run seed: ${{ github.event.inputs.run_seed }}"
+          
+          # Build overrides for seed if requested
+          OVERRIDES="{}"
+          if [ "${{ github.event.inputs.run_seed }}" == "true" ]; then
+            OVERRIDES='{"containerOverrides":[{"name":"migrations","environment":[{"name":"SEED_DATABASE","value":"true"}]}]}'
+            echo "  Seed will be run after migrations"
+          fi
           
           # Run the migration task
           TASK_ARN=$(aws ecs run-task \
@@ -162,6 +175,7 @@ jobs:
             --task-definition $TASK_DEF_ARN \
             --launch-type FARGATE \
             --network-configuration "awsvpcConfiguration={subnets=[$SUBNETS],securityGroups=[$SECURITY_GROUPS],assignPublicIp=DISABLED}" \
+            --overrides "$OVERRIDES" \
             --query 'tasks[0].taskArn' \
             --output text)
           

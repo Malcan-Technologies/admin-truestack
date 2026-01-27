@@ -47,6 +47,7 @@ variable "db_username" {
 variable "db_password" {
   description = "RDS master password"
   type        = string
+  default     = "placeholder-not-used-for-existing-resources"
   sensitive   = true
 }
 
@@ -54,6 +55,7 @@ variable "db_password" {
 variable "ecr_repository_url" {
   description = "ECR repository URL for the application image"
   type        = string
+  default     = "491694399426.dkr.ecr.ap-southeast-5.amazonaws.com/trueidentity"
 }
 
 variable "image_tag" {
@@ -62,16 +64,18 @@ variable "image_tag" {
   default     = "latest"
 }
 
-# Secrets
+# Secrets (defaults provided for plan-only runs; secrets already exist in AWS Secrets Manager)
 variable "better_auth_secret" {
   description = "BetterAuth secret key"
   type        = string
+  default     = "placeholder-not-used-for-existing-resources"
   sensitive   = true
 }
 
 variable "api_key_encryption_secret" {
   description = "API key encryption secret (64 hex chars)"
   type        = string
+  default     = "placeholder-not-used-for-existing-resources"
   sensitive   = true
 }
 
@@ -79,18 +83,21 @@ variable "api_key_encryption_secret" {
 variable "innovatif_api_key" {
   description = "Innovatif API key"
   type        = string
+  default     = "placeholder-not-used-for-existing-resources"
   sensitive   = true
 }
 
 variable "innovatif_md5_key" {
   description = "Innovatif MD5 key"
   type        = string
+  default     = "placeholder-not-used-for-existing-resources"
   sensitive   = true
 }
 
 variable "innovatif_ciphertext" {
   description = "Innovatif ciphertext (IV)"
   type        = string
+  default     = "placeholder-not-used-for-existing-resources"
   sensitive   = true
 }
 

@@ -43,3 +43,11 @@ npx prisma migrate deploy
 
 echo ""
 echo "✅ Migrations complete!"
+
+# Run seed if SEED_DATABASE is set to "true"
+if [ "$SEED_DATABASE" = "true" ]; then
+  echo ""
+  echo "🌱 Running database seed..."
+  npx prisma db seed
+  echo "✅ Seed complete!"
+fi
