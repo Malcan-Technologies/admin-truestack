@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html>
+<head>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/3.3.0/core.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/3.3.0/cipher-core.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/3.3.0/crypto-js.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/3.3.0/aes.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/3.3.0/enc-base64.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/3.3.0/enc-utf8.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/3.3.0/md5.min.js"></script>
+<script>
+
+function another() {
+
+    let cipherkey = 'MTIzNDU2Nzg5MDEy';
+    let cipher = 'aes-256-cbc';
+    let md5key = 'm4X12dM8GeYGYl1gLXO8PaZTERGG9bVt';
+    let api_key = 'your_api_key';
+    let package_name = 'your_package_name';
+    let ref_id = 'your_generated_ref_id';
+    let callback_mode = '0';
+	let response_mode = '1';
+    let request_time = '2023-02-28 01:01:01';
+    let response_url = 'https://staging.xendity.com/';
+	let backend_url = 'https://staging.xendity.com/';
+    let platform = 'Web';
+    let document_name = 'EXAMPLE NAME';
+    let document_number = '123456121234';
+    let source_string = api_key + md5key + package_name + ref_id + md5key + request_time;
+    let md5_source_string = CryptoJS.MD5(source_string);    
+    let gateway_signature = btoa(md5_source_string);
+
+    console.log('|0|');
+    console.log(md5_source_string);
+    console.log(gateway_signature);
+
+    var md5 = md5key;
+    var set_iv = cipherkey;
+    var set_key = set_iv + api_key;
+    var proiv = set_iv;
+    var prokey = set_key.substring(0,32);
+    var iv = CryptoJS.enc.Utf8.parse(proiv);
+    var key = CryptoJS.enc.Utf8.parse(prokey);
+
+    var requestBody = {
+        "api_key" : api_key,
+        "package_name" : package_name,
+        "ref_id" : ref_id,
+        "callback_mode" : callback_mode,
+        "response_mode" : response_mode,
+        "request_time" : request_time,
+        "response_url" : response_url,
+        "backend_url" : backend_url,
+        "signature" : gateway_signature,
+        "platform" : platform,
+        "document_name" : document_name,
+        "document_number" : document_number
+    };
+
+    var encrypted = CryptoJS.AES.encrypt(
+    JSON.stringify(requestBody),
+    key,
+    { 
+        iv: iv
+    }
+    ).toString();
+
+    console.log(encrypted);
+
+    var obj_send = {
+        "api_key" : api_key,
+        "data" : encrypted
+    };
+    
+    console.log('|2|');
+    console.log(obj_send);
+
+    let json_obj_send = JSON.stringify(obj_send);
+
+    console.log('|3|');
+    console.log(json_obj_send);
+
+    var response = JSON.parse(json_obj_send);
+    var responseData = response['data'];
+
+    console.log('|4|');
+    console.log(responseData);
+
+    var decrypted = CryptoJS.AES.decrypt(responseData, key, {iv : iv});
+
+    console.log('|5|');
+    console.log(decrypted.toString(CryptoJS.enc.Utf8));
+
+}
+
+</script>
+</head>
+<body>
+
+<h2>Demo JavaScript in Head</h2>
+
+<p id="demo">A Paragraph.</p>
+
+<button type="button" onclick="another()">Try it</button>
+
+</body>
+</html> 

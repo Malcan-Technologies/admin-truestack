@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/3.3.0/core.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/3.3.0/cipher-core.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/3.3.0/crypto-js.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/3.3.0/aes.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/3.3.0/enc-base64.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/3.3.0/enc-utf8.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/3.3.0/md5.min.js"></script>
+</head>
+<body>
+
+<h2>EKYC Gateway - Create New Transaction</h2>
+
+<label>API key:</label><br>
+<input type="text" id="api_key" size="60" value="api_key_here"><br><br>
+
+<label>Package Name:</label><br>
+<input type="text" id="package_name" size="60" value="package_name_here"><br><br>
+
+<label>Ref ID:</label><br>
+<input type="text" id="ref_id" size="60" placeholder="Leave empty to auto-generate"><br><br>
+
+<button type="button" onclick="another()">Create New Transaction</button>
+
+<p id="demo" style="margin-top: 30px;">Response from api will be display here</p>
+
+<script>
+function generateRefId(prefix = 'ref_') {
+    const randomStr = Math.random().toString(36).substring(2, 10);
+    const timestamp = Date.now(); 
+    return `${prefix}${randomStr}_${timestamp}`;
+}
+
+async function another() {
+    const cipherkey = 'MTIzNDU2Nzg5MDEy';
+    const md5key = 'm4X12dM8GeYGYl1gLXO8PaZTERGG9bVt';
+
+    let api_key = document.getElementById('api_key').value.trim();
+    let package_name = document.getElementById('package_name').value.trim();
+    let ref_id = document.getElementById('ref_id').value.trim();
+
+    if (!api_key || !package_name) {
+        document.getElementById("demo").innerText = "Please enter both API Key and Package Name.";
+        return;
+    }
+
+    if (!ref_id) {
+        ref_id = generateRefId('userref_');
+    }
+
+    const callback_mode = '0';
+    const response_mode = '1';
+    const request_time = '2023-02-28 01:01:01';
+    const response_url = 'https://staging.xendity.com/';
+    const backend_url = 'https://staging.xendity.com/';
+    const platform = 'Web';
+    const document_name = 'EXAMPLE NAME';
+    const document_number = '010101020201';
+    const gateway_url = "https://staging.ekyc.xendity.com/v1/gateway/create-transaction";
+
+    const source_string = api_key + md5key + package_name + ref_id + md5key + request_time;
+    const md5_source_string = CryptoJS.MD5(source_string);
+    const gateway_signature = btoa(md5_source_string);
+
+    const iv = CryptoJS.enc.Utf8.parse(cipherkey);
+    const key = CryptoJS.enc.Utf8.parse((cipherkey + api_key).substring(0, 32));
+
+    const requestBody = {
+        api_key,
+        package_name,
+        ref_id,
+        callback_mode,
+        response_mode,
+        request_time,
+        response_url,
+        backend_url,
+        signature: gateway_signature,
+        platform,
+        document_name,
+        document_number
+    };
+
+    const encrypted = CryptoJS.AES.encrypt(JSON.stringify(requestBody), key, { iv }).toString();
+
+    const obj_send = {
+        api_key: api_key,
+        data: encrypted
+    };
+
+    try {
+        const response = await fetch(gateway_url, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify(obj_send)
+        });
+
+        const result = await response.json();
+
+        const decrypted = CryptoJS.AES.decrypt(result.data, key, { iv });
+        const plaintext = decrypted.toString(CryptoJS.enc.Utf8);
+        const responseObj = JSON.parse(plaintext);
+
+        let output = `<h3>API Response:</h3><ul>`;
+        for (const [key, value] of Object.entries(responseObj)) {
+            if (key === 'onboarding_url') {
+                output += `<li><strong>${key}:</strong> <a href="${value}" target="_blank">${value}</a></li>`;
+            } else {
+                output += `<li><strong>${key}:</strong> ${value}</li>`;
+            }
+        }
+        output += `</ul>`;
+
+        document.getElementById("demo").innerHTML = output;
+
+    } catch (error) {
+        console.error("Request failed:", error);
+        document.getElementById("demo").innerText = "Error: " + error;
+    }
+}
+</script>
+
+</body>
+</html>
