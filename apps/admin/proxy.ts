@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 
-// Proxy is now only for routing concerns (rewrites, redirects, headers)
+// Next.js 16 proxy - for routing concerns only (rewrites, redirects, headers)
 // Authentication is handled in server layouts per Next.js 16 best practices
 export function proxy(request: NextRequest) {
   // Allow all requests to pass through
-  // Auth is handled in the (dashboard) layout
+  // Auth is handled in the (dashboard) layout.tsx
   return NextResponse.next();
 }
 
@@ -15,7 +15,7 @@ export const config = {
      * - _next/static (static files)
      * - _next/image (image optimization files)
      * - favicon.ico (favicon file)
-     * - public folder
+     * - public folder assets
      */
     "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
   ],

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { headers } from "next/headers";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -12,18 +13,42 @@ import {
 } from "@/components/ui/table";
 import { Plus } from "lucide-react";
 
-// This would come from the database in production
-const clients: Array<{
+type Client = {
   id: string;
   name: string;
   code: string;
   status: "active" | "suspended";
-  creditBalance: number;
-  sessionsCount: number;
-  createdAt: string;
-}> = [];
+  credit_balance: number;
+  sessions_count: number;
+  created_at: string;
+};
 
-export default function ClientsPage() {
+async function getClients(): Promise<Client[]> {
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+  const headersList = await headers();
+  
+  try {
+    const response = await fetch(`${apiUrl}/api/admin/clients`, {
+      headers: {
+        cookie: headersList.get("cookie") || "",
+      },
+      cache: "no-store",
+    });
+
+    if (!response.ok) {
+      console.error("Failed to fetch clients:", response.status);
+      return [];
+    }
+
+    return response.json();
+  } catch (error) {
+    console.error("Error fetching clients:", error);
+    return [];
+  }
+}
+
+export default async function ClientsPage() {
+  const clients = await getClients();
   return (
     <div>
       <PageHeader
@@ -96,13 +121,13 @@ export default function ClientsPage() {
                     </Badge>
                   </TableCell>
                   <TableCell className="text-slate-300">
-                    {client.creditBalance.toLocaleString()}
+                    {Number(client.credit_balance || 0).toLocaleString()}
                   </TableCell>
                   <TableCell className="text-slate-300">
-                    {client.sessionsCount.toLocaleString()}
+                    {Number(client.sessions_count || 0).toLocaleString()}
                   </TableCell>
                   <TableCell className="text-slate-400">
-                    {new Date(client.createdAt).toLocaleDateString()}
+                    {new Date(client.created_at).toLocaleDateString()}
                   </TableCell>
                 </TableRow>
               ))}

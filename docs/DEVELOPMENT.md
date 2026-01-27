@@ -48,13 +48,16 @@ pnpm install
 ### 2. Start PostgreSQL
 
 ```bash
-# Start the database container
-pnpm docker:up
+# Start only the database container (not the app container)
+docker compose up -d postgres
 
 # Verify it's running
 docker ps
 # Should show: trueidentity-postgres
 ```
+
+> **Note:** The `docker-compose.yml` also defines an `app` service that requires a Dockerfile.
+> For local development, we run Next.js directly with `pnpm dev` instead of in a container.
 
 ### 3. Set Up Environment Variables
 
@@ -89,7 +92,13 @@ NEXT_PUBLIC_API_URL="http://localhost:3001"
 
 ### 4. Initialize the Database
 
+The database commands need `DATABASE_URL` to be available. Since Prisma runs from the `packages/shared` directory, you need to either:
+
+**Option A: Export the variable first (recommended)**
 ```bash
+# Export DATABASE_URL for this terminal session
+export DATABASE_URL="postgresql://postgres:postgres@localhost:5432/trueidentity"
+
 # Generate Prisma client
 pnpm db:generate
 
@@ -99,6 +108,21 @@ pnpm db:migrate:dev
 # (Optional) Seed the database with test data
 pnpm db:seed
 ```
+
+**Option B: Inline with each command**
+```bash
+# Generate Prisma client
+pnpm db:generate
+
+# Run migrations with inline DATABASE_URL
+DATABASE_URL="postgresql://postgres:postgres@localhost:5432/trueidentity" pnpm db:migrate:dev
+
+# Seed the database
+DATABASE_URL="postgresql://postgres:postgres@localhost:5432/trueidentity" pnpm db:seed
+```
+
+> **Note:** The `.env` file in the root is used by Next.js apps during `pnpm dev`, but Prisma CLI
+> commands run from `packages/shared` need the `DATABASE_URL` exported or passed inline.
 
 ### 5. Start Development Servers
 

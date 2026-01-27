@@ -1,23 +1,9 @@
-import { redirect } from "next/navigation";
-import { headers } from "next/headers";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ArrowRight, ExternalLink } from "lucide-react";
-import { getSession } from "@/lib/auth";
 
-export default async function HomePage() {
-  // Check if user is already authenticated
-  const { data: session } = await getSession({
-    fetchOptions: {
-      headers: Object.fromEntries((await headers()).entries()),
-    },
-  });
-
-  // If authenticated, redirect to dashboard
-  if (session?.user) {
-    redirect("/clients");
-  }
+export default function HomePage() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-background p-4">
       <Card className="w-full max-w-md border-slate-800 bg-slate-900/80 backdrop-blur-sm">

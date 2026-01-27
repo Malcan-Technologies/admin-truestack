@@ -10,6 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Loader2, ArrowLeft } from "lucide-react";
 import Link from "next/link";
+import { apiClient } from "@/lib/utils";
 
 export default function NewClientPage() {
   const router = useRouter();
@@ -40,18 +41,11 @@ export default function NewClientPage() {
     setLoading(true);
 
     try {
-      const response = await fetch("/api/admin/clients", {
+      const client = await apiClient<{ id: string }>("/api/admin/clients", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(formData),
       });
 
-      if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.error || "Failed to create client");
-      }
-
-      const client = await response.json();
       router.push(`/clients/${client.id}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "An error occurred");

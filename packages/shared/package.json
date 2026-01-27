@@ -25,6 +25,7 @@
     "@aws-sdk/client-s3": "^3.975.0",
     "@prisma/adapter-pg": "^7.3.0",
     "@prisma/client": "7.3.0",
+    "better-auth": "^1.4.17",
     "pg": "^8.17.2"
   },
   "devDependencies": {

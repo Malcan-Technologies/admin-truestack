@@ -4,6 +4,12 @@ import { Pool } from "pg";
 // Enable SSL for production PostgreSQL connections (required by RDS)
 const isProduction = process.env.NODE_ENV === "production";
 
+// Allowed origins for CORS (admin app)
+const allowedOrigins = [
+  "http://localhost:3002", // Admin app local dev
+  process.env.ADMIN_APP_URL, // Admin app in production
+].filter(Boolean) as string[];
+
 export const auth = betterAuth({
   database: new Pool({
     connectionString: process.env.DATABASE_URL,
@@ -25,11 +31,24 @@ export const auth = betterAuth({
       enabled: true,
       maxAge: 60 * 5, // 5 minute cache
     },
+    // Map session fields to snake_case columns
+    fields: {
+      userId: "user_id",
+      expiresAt: "expires_at",
+      ipAddress: "ip_address",
+      userAgent: "user_agent",
+      createdAt: "created_at",
+      updatedAt: "updated_at",
+    },
   },
 
-  // Cookies are HttpOnly, Secure, SameSite=Lax by default when baseURL is HTTPS
-  
+  // Map user fields to snake_case columns
   user: {
+    fields: {
+      emailVerified: "email_verified",
+      createdAt: "created_at",
+      updatedAt: "updated_at",
+    },
     additionalFields: {
       role: {
         type: "string",
@@ -40,10 +59,29 @@ export const auth = betterAuth({
     },
   },
 
+  // Map account fields to snake_case columns
+  account: {
+    fields: {
+      userId: "user_id",
+      accountId: "account_id",
+      providerId: "provider_id",
+      accessToken: "access_token",
+      refreshToken: "refresh_token",
+      accessTokenExpiresAt: "access_token_expires_at",
+      refreshTokenExpiresAt: "refresh_token_expires_at",
+      idToken: "id_token",
+      createdAt: "created_at",
+      updatedAt: "updated_at",
+    },
+  },
+
   // Disable public signup - admin users are pre-created
   advanced: {
     disableCSRFCheck: false,
   },
+
+  // CORS configuration for cross-origin requests from admin app
+  trustedOrigins: allowedOrigins,
 });
 
 // Export type for session

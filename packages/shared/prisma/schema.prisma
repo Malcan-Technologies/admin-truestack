@@ -113,7 +113,7 @@ model Product {
 // ============================================
 
 model Client {
-  id                  String   @id @default(uuid()) @db.Uuid
+  id                  String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   name                String
   code                String   @unique // e.g., 'ACME'
   contactEmail        String?  @map("contact_email")
@@ -142,7 +142,7 @@ model Client {
 // ============================================
 
 model ClientApiKey {
-  id              String    @id @default(uuid()) @db.Uuid
+  id              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   clientId        String    @map("client_id") @db.Uuid
   productId       String    @map("product_id")
   apiKeyHash      String    @map("api_key_hash") // SHA256 hash
@@ -175,7 +175,7 @@ model ClientApiKey {
 // ============================================
 
 model ClientProductConfig {
-  id             String   @id @default(uuid()) @db.Uuid
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   clientId       String   @map("client_id") @db.Uuid
   productId      String   @map("product_id")
   enabled        Boolean  @default(true)
@@ -201,7 +201,7 @@ model ClientProductConfig {
 // ============================================
 
 model CreditLedger {
-  id           String   @id @default(uuid()) @db.Uuid
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   clientId     String   @map("client_id") @db.Uuid
   productId    String   @map("product_id")
   amount       Int      // positive = credit, negative = debit
@@ -227,7 +227,7 @@ model CreditLedger {
 // ============================================
 
 model KycSession {
-  id                   String    @id @default(uuid()) @db.Uuid
+  id                   String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   clientId             String    @map("client_id") @db.Uuid
   refId                String    @unique @map("ref_id")
   innovatifOnboardingId String?  @map("innovatif_onboarding_id")
@@ -271,7 +271,7 @@ model KycSession {
 // ============================================
 
 model WebhookLog {
-  id           String   @id @default(uuid()) @db.Uuid
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   kycSessionId String   @map("kyc_session_id") @db.Uuid
   source       String   // innovatif_callback, manual_retry
   payloadHash  String   @map("payload_hash") // SHA256 for deduplication

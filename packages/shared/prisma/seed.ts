@@ -1,11 +1,8 @@
 import { PrismaClient } from "@prisma/client";
 import { Pool } from "pg";
 import { PrismaPg } from "@prisma/adapter-pg";
+import { hashPassword } from "better-auth/crypto";
 import crypto from "crypto";
-
-// Pre-generated bcrypt hash of 'changeme123' for seed
-// Note: BetterAuth uses bcrypt for password hashing
-const SEED_PASSWORD_HASH = "$2b$10$T6Ng/qA2MGQ00xUj6vpmxueHH6mxj3GfQ/VY2/1Mopx7vW8YB4zli";
 
 async function main() {
   // Enable SSL for production PostgreSQL connections (required by RDS)
@@ -43,6 +40,9 @@ async function main() {
   if (!existingAdmin) {
     const adminId = `admin_${crypto.randomUUID()}`;
     const accountId = `acc_${crypto.randomUUID()}`;
+    
+    // Hash password using Better Auth's scrypt (same as runtime)
+    const passwordHash = await hashPassword("changeme123");
 
     // Create admin user
     const admin = await prisma.user.create({
@@ -55,14 +55,14 @@ async function main() {
       },
     });
 
-    // Create account with password (hash of 'changeme123')
+    // Create account with password
     await prisma.account.create({
       data: {
         id: accountId,
         userId: adminId,
         accountId: adminId,
         providerId: "credential",
-        password: SEED_PASSWORD_HASH,
+        password: passwordHash,
       },
     });
 

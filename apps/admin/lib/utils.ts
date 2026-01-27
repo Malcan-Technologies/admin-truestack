@@ -6,7 +6,8 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 // API client helper for making requests to the backend
-const apiUrl = process.env.NEXT_PUBLIC_API_URL || "";
+// Default to localhost:3001 for local development
+const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
 
 export async function apiClient<T>(
   endpoint: string,

@@ -22,8 +22,12 @@
     "docker:down": "docker compose down",
     "docker:logs": "docker compose logs -f"
   },
+  "dependencies": {
+    "pg": "^8.17.2"
+  },
   "devDependencies": {
     "@types/node": "^20",
+    "@types/pg": "^8.16.0",
     "tsx": "^4.19.0",
     "typescript": "^5"
   }
