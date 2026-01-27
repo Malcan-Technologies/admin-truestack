@@ -9,6 +9,7 @@ export default {
   schema: path.join(__dirname, "prisma", "schema.prisma"),
   migrations: {
     path: path.join(__dirname, "prisma", "migrations"),
+    seed: "npx tsx prisma/seed.ts",
   },
   datasource: {
     url: process.env.DATABASE_URL,
