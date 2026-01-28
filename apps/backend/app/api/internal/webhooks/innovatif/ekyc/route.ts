@@ -71,12 +71,34 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Innovatif prepends the package name to ref_id in webhook responses
-    // Strip it to get the original ref_id we stored in the session
+    // Innovatif prepends a transformed package name to ref_id in webhook responses
+    // The package name format varies (dots to underscores, added suffixes like "trial")
+    // Try to find the session by:
+    // 1. First trying exact match
+    // 2. Then trying to strip known prefixes based on package name pattern
+    // 3. Finally, looking for a session where ref_id is a suffix of raw_ref_id
     let ref_id = raw_ref_id;
-    if (INNOVATIF_PACKAGE_NAME && raw_ref_id.startsWith(INNOVATIF_PACKAGE_NAME)) {
-      ref_id = raw_ref_id.substring(INNOVATIF_PACKAGE_NAME.length);
-      console.log(`Stripped package name prefix from ref_id: ${raw_ref_id} -> ${ref_id}`);
+    
+    // Try stripping package name (with dots replaced by underscores, and possible suffixes)
+    if (INNOVATIF_PACKAGE_NAME) {
+      // Convert package name format: "truestack.gateway.test" -> "truestack_gateway_test"
+      const packagePrefix = INNOVATIF_PACKAGE_NAME.replace(/\./g, "_");
+      
+      // Check for various prefix patterns Innovatif might use
+      const possiblePrefixes = [
+        INNOVATIF_PACKAGE_NAME,           // Original format
+        packagePrefix,                     // Underscores instead of dots
+        `${packagePrefix}trial`,          // With "trial" suffix (no underscore)
+        `${packagePrefix}_trial`,         // With "_trial" suffix
+      ];
+      
+      for (const prefix of possiblePrefixes) {
+        if (raw_ref_id.startsWith(prefix)) {
+          ref_id = raw_ref_id.substring(prefix.length);
+          console.log(`Stripped package prefix "${prefix}" from ref_id: ${raw_ref_id} -> ${ref_id}`);
+          break;
+        }
+      }
     }
 
     // Verify signature if provided
@@ -115,19 +137,50 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: true, duplicate: true });
     }
 
-    // Find the session
-    const session = await queryOne<{
+    // Find the session - try exact match first, then suffix match as fallback
+    let session = await queryOne<{
       id: string;
       client_id: string;
       status: string;
       billed: boolean;
+      ref_id: string;
     }>(
-      `SELECT id, client_id, status, COALESCE(billed, false) as billed FROM kyc_session WHERE ref_id = $1`,
+      `SELECT id, client_id, status, COALESCE(billed, false) as billed, ref_id FROM kyc_session WHERE ref_id = $1`,
       [ref_id]
     );
 
+    // If not found and we have a prefix, try finding by suffix match
+    // This handles cases where Innovatif adds unexpected prefixes
+    if (!session && ref_id !== raw_ref_id) {
+      // We already tried stripping a prefix, try finding by the stripped ref_id
+      console.log(`Exact match failed for ref_id: ${ref_id}, trying suffix match with raw_ref_id: ${raw_ref_id}`);
+    }
+    
+    // Fallback: try to find session where the raw_ref_id ends with the stored ref_id
     if (!session) {
-      console.error("Session not found for ref_id:", ref_id);
+      session = await queryOne<{
+        id: string;
+        client_id: string;
+        status: string;
+        billed: boolean;
+        ref_id: string;
+      }>(
+        `SELECT id, client_id, status, COALESCE(billed, false) as billed, ref_id 
+         FROM kyc_session 
+         WHERE $1 LIKE '%' || ref_id
+         ORDER BY created_at DESC
+         LIMIT 1`,
+        [raw_ref_id]
+      );
+      
+      if (session) {
+        console.log(`Found session by suffix match: raw_ref_id=${raw_ref_id}, stored ref_id=${session.ref_id}`);
+        ref_id = session.ref_id; // Use the actual stored ref_id
+      }
+    }
+
+    if (!session) {
+      console.error("Session not found for ref_id:", ref_id, "raw_ref_id:", raw_ref_id);
       return NextResponse.json(
         { error: "Session not found" },
         { status: 404 }
