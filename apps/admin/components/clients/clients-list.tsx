@@ -22,6 +22,8 @@ type Client = {
   status: "active" | "suspended";
   credit_balance: number;
   sessions_count: number;
+  billed_total: number;
+  billed_mtd: number;
   created_at: string;
 };
 
@@ -67,6 +69,8 @@ export function ClientsList({ clients }: ClientsListProps) {
                 <TableHead className="text-slate-400">Status</TableHead>
                 <TableHead className="text-slate-400">Credits (10 = RM1)</TableHead>
                 <TableHead className="text-slate-400">Sessions</TableHead>
+                <TableHead className="text-slate-400">Billed</TableHead>
+                <TableHead className="text-slate-400">Billed (MTD)</TableHead>
                 <TableHead className="text-slate-400">Created</TableHead>
               </TableRow>
             </TableHeader>
@@ -113,6 +117,12 @@ export function ClientsList({ clients }: ClientsListProps) {
                   </TableCell>
                   <TableCell className="text-slate-300">
                     {Number(client.sessions_count || 0).toLocaleString()}
+                  </TableCell>
+                  <TableCell className="text-slate-300">
+                    {Number(client.billed_total || 0).toLocaleString()}
+                  </TableCell>
+                  <TableCell className="text-green-400 font-medium">
+                    {Number(client.billed_mtd || 0).toLocaleString()}
                   </TableCell>
                   <TableCell className="text-slate-400">
                     {new Date(client.created_at).toLocaleDateString("en-US", {

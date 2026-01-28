@@ -22,6 +22,10 @@ export async function GET(request: NextRequest) {
       notes: string | null;
       created_at: string;
       updated_at: string;
+      credit_balance: number;
+      sessions_count: number;
+      billed_total: number;
+      billed_mtd: number;
     }>(`
       SELECT 
         c.id,
@@ -34,12 +38,27 @@ export async function GET(request: NextRequest) {
         c.notes,
         c.created_at,
         c.updated_at,
-        COALESCE(SUM(cl.amount), 0) as credit_balance,
-        COUNT(DISTINCT ks.id) as sessions_count
+        COALESCE((
+          SELECT balance_after FROM credit_ledger 
+          WHERE client_id = c.id AND product_id = 'true_identity'
+          ORDER BY created_at DESC LIMIT 1
+        ), 0) as credit_balance,
+        COALESCE((
+          SELECT COUNT(*) FROM kyc_session 
+          WHERE client_id = c.id
+        ), 0) as sessions_count,
+        COALESCE((
+          SELECT COUNT(*) FROM kyc_session 
+          WHERE client_id = c.id AND billed = true
+        ), 0) as billed_total,
+        COALESCE((
+          SELECT COUNT(*) FROM kyc_session 
+          WHERE client_id = c.id 
+            AND billed = true
+            AND updated_at >= date_trunc('month', NOW() AT TIME ZONE 'Asia/Kuala_Lumpur') AT TIME ZONE 'Asia/Kuala_Lumpur'
+            AND updated_at < (date_trunc('month', NOW() AT TIME ZONE 'Asia/Kuala_Lumpur') + INTERVAL '1 month') AT TIME ZONE 'Asia/Kuala_Lumpur'
+        ), 0) as billed_mtd
       FROM client c
-      LEFT JOIN credit_ledger cl ON cl.client_id = c.id AND cl.product_id = 'true_identity'
-      LEFT JOIN kyc_session ks ON ks.client_id = c.id
-      GROUP BY c.id
       ORDER BY c.created_at DESC
     `);
 

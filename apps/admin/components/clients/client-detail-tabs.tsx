@@ -326,6 +326,17 @@ export function ClientDetailTabs({ client }: ClientDetailTabsProps) {
                   {Number(client.sessionsCount || 0).toLocaleString()}
                 </span>
               </div>
+              <div className="flex items-center justify-between border-t border-slate-700 pt-4">
+                <div>
+                  <span className="text-slate-400">Billed Sessions</span>
+                  <p className="text-xs text-slate-500">
+                    {new Date().toLocaleString("en-US", { month: "long", year: "numeric" })}
+                  </p>
+                </div>
+                <span className="text-2xl font-semibold text-green-400">
+                  {loadingPricing ? "..." : currentMonthUsage.toLocaleString()}
+                </span>
+              </div>
             </CardContent>
           </Card>
         </div>

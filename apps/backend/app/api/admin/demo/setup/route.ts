@@ -232,6 +232,25 @@ export async function GET(request: NextRequest) {
     );
     const allowOverdraft = configResult?.allow_overdraft ?? true;
 
+    // Get session statistics for debugging
+    const sessionStats = await queryOne<{
+      total_sessions: string;
+      billed_total: string;
+      billed_mtd: string;
+    }>(
+      `SELECT 
+        COUNT(*) as total_sessions,
+        COUNT(*) FILTER (WHERE billed = true) as billed_total,
+        COUNT(*) FILTER (
+          WHERE billed = true
+            AND updated_at >= date_trunc('month', NOW() AT TIME ZONE 'Asia/Kuala_Lumpur') AT TIME ZONE 'Asia/Kuala_Lumpur'
+            AND updated_at < (date_trunc('month', NOW() AT TIME ZONE 'Asia/Kuala_Lumpur') + INTERVAL '1 month') AT TIME ZONE 'Asia/Kuala_Lumpur'
+        ) as billed_mtd
+       FROM kyc_session
+       WHERE client_id = $1`,
+      [client.id]
+    );
+
     return NextResponse.json({
       isNew,
       client: {
@@ -255,6 +274,11 @@ export async function GET(request: NextRequest) {
       pricingTiers,
       recentSessions,
       creditLedger,
+      sessionStats: {
+        totalSessions: parseInt(sessionStats?.total_sessions || "0"),
+        billedTotal: parseInt(sessionStats?.billed_total || "0"),
+        billedMtd: parseInt(sessionStats?.billed_mtd || "0"),
+      },
     });
   } catch (error) {
     console.error("Error setting up demo client:", error);

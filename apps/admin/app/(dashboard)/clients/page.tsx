@@ -8,6 +8,8 @@ type Client = {
   status: "active" | "suspended";
   credit_balance: number;
   sessions_count: number;
+  billed_total: number;
+  billed_mtd: number;
   created_at: string;
 };
 

@@ -93,6 +93,11 @@ type DemoSetupData = {
     updated_at: string;
   }[];
   creditLedger: CreditEntry[];
+  sessionStats: {
+    totalSessions: number;
+    billedTotal: number;
+    billedMtd: number;
+  };
 };
 
 type KycSession = {
@@ -332,10 +337,9 @@ export default function TrueIdentityDemoPage() {
       const session = await response.json();
       setCurrentSession(session);
 
-      // Update credit balance
-      if (demoData) {
-        setDemoData({ ...demoData, creditBalance: demoData.creditBalance - 1 });
-      }
+      // Note: Credits are not deducted on session creation
+      // They are deducted when the session is completed (status=2)
+      // We'll refresh the balance when polling for status updates
 
       toast.success("KYC session created successfully!");
     } catch (error) {
@@ -363,6 +367,12 @@ export default function TrueIdentityDemoPage() {
       // Update current session status from the fetched data
       if (data.session && data.session.status !== currentSession.status) {
         setCurrentSession((prev) => prev ? { ...prev, status: data.session!.status } : prev);
+        
+        // If session just completed, refresh demo data to update credit balance
+        // Credits are deducted when session is completed
+        if (data.session.status === "completed" || data.session.status === "expired") {
+          fetchDemoSetup();
+        }
       }
       
       if (showToast) {
@@ -376,7 +386,7 @@ export default function TrueIdentityDemoPage() {
     } finally {
       setPollingSession(false);
     }
-  }, [currentSession?.id, currentSession?.status]);
+  }, [currentSession?.id, currentSession?.status, fetchDemoSetup]);
 
   // Manual refresh function
   const manualRefresh = useCallback(() => {
@@ -720,6 +730,26 @@ export default function TrueIdentityDemoPage() {
               </Button>
             </div>
             
+            {/* Session Statistics */}
+            <div className="border-t border-slate-700 pt-4 space-y-2">
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-slate-400">Total Sessions</span>
+                <span className="text-white font-medium">{demoData?.sessionStats?.totalSessions || 0}</span>
+              </div>
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-slate-400">Billed (All Time)</span>
+                <span className="text-white font-medium">{demoData?.sessionStats?.billedTotal || 0}</span>
+              </div>
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-slate-400">Billed (MTD)</span>
+                <span className="text-green-400 font-medium">{demoData?.sessionStats?.billedMtd || 0}</span>
+              </div>
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-slate-400">Next Session #</span>
+                <span className="text-indigo-400 font-medium">{(demoData?.sessionStats?.billedMtd || 0) + 1}</span>
+              </div>
+            </div>
+            
             {/* Allow Overdraft Toggle */}
             <div className="border-t border-slate-700 pt-4">
               <div className="flex items-center justify-between">
@@ -895,7 +925,7 @@ export default function TrueIdentityDemoPage() {
 
                 <Button
                   onClick={createKycSession}
-                  disabled={creatingSession || !demoData?.apiKey || demoData.creditBalance < 1}
+                  disabled={creatingSession || !demoData?.apiKey || (!demoData.allowOverdraft && demoData.creditBalance < 1)}
                   className="w-full bg-gradient-to-r from-indigo-500 to-violet-500 text-white hover:from-indigo-600 hover:to-violet-600"
                 >
                   {creatingSession ? (
@@ -911,9 +941,15 @@ export default function TrueIdentityDemoPage() {
                   )}
                 </Button>
 
-                {demoData && demoData.creditBalance < 1 && (
+                {demoData && !demoData.allowOverdraft && demoData.creditBalance < 1 && (
                   <p className="text-center text-sm text-red-400">
-                    Insufficient credits. Please top up to create sessions.
+                    Insufficient credits. Please top up or enable overdraft to create sessions.
+                  </p>
+                )}
+                
+                {demoData && demoData.allowOverdraft && demoData.creditBalance < 0 && (
+                  <p className="text-center text-sm text-amber-400">
+                    Running on overdraft ({Math.abs(demoData.creditBalance)} credits overdue)
                   </p>
                 )}
               </CardContent>
@@ -1622,6 +1658,42 @@ export default function TrueIdentityDemoPage() {
 
         {/* Billing Tab */}
         <TabsContent value="billing">
+          {/* Session Statistics Summary */}
+          <div className="grid gap-4 md:grid-cols-4 mb-6">
+            <Card className="border-slate-800 bg-slate-900/50">
+              <CardContent className="pt-4">
+                <div className="text-center">
+                  <p className="text-xs text-slate-400">Total Sessions</p>
+                  <p className="text-2xl font-bold text-white">{demoData?.sessionStats?.totalSessions || 0}</p>
+                </div>
+              </CardContent>
+            </Card>
+            <Card className="border-slate-800 bg-slate-900/50">
+              <CardContent className="pt-4">
+                <div className="text-center">
+                  <p className="text-xs text-slate-400">Billed (All Time)</p>
+                  <p className="text-2xl font-bold text-white">{demoData?.sessionStats?.billedTotal || 0}</p>
+                </div>
+              </CardContent>
+            </Card>
+            <Card className="border-slate-800 bg-slate-900/50">
+              <CardContent className="pt-4">
+                <div className="text-center">
+                  <p className="text-xs text-slate-400">Billed (MTD - {new Date().toLocaleString("en-US", { month: "short" })})</p>
+                  <p className="text-2xl font-bold text-green-400">{demoData?.sessionStats?.billedMtd || 0}</p>
+                </div>
+              </CardContent>
+            </Card>
+            <Card className="border-slate-800 bg-slate-900/50">
+              <CardContent className="pt-4">
+                <div className="text-center">
+                  <p className="text-xs text-slate-400">Next Session #</p>
+                  <p className="text-2xl font-bold text-indigo-400">{(demoData?.sessionStats?.billedMtd || 0) + 1}</p>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
           <Card className="border-slate-800 bg-slate-900/50">
             <CardHeader>
               <CardTitle className="text-white flex items-center gap-2">

@@ -403,16 +403,20 @@ export async function POST(request: NextRequest) {
           [`credit_${session.client_id}_true_identity`]
         );
 
-        // Get current month's completed session count for this client (for tiered pricing)
+        // Get current month's billed session count for this client (for tiered pricing)
         // Use Malaysian timezone (Asia/Kuala_Lumpur, UTC+8) for monthly reset at midnight MYT
+        // IMPORTANT: Count by billed_at (when the session was billed), not created_at
+        // This ensures tiering is based on billing order, not creation order
+        // Exclude current session from count since we already marked it as billed above
         const usageResult = await txClient.query<{ count: string }>(
           `SELECT COUNT(*) as count 
            FROM kyc_session 
            WHERE client_id = $1 
+             AND id != $2
              AND billed = true
-             AND created_at >= date_trunc('month', NOW() AT TIME ZONE 'Asia/Kuala_Lumpur') AT TIME ZONE 'Asia/Kuala_Lumpur'
-             AND created_at < (date_trunc('month', NOW() AT TIME ZONE 'Asia/Kuala_Lumpur') + INTERVAL '1 month') AT TIME ZONE 'Asia/Kuala_Lumpur'`,
-          [session.client_id]
+             AND updated_at >= date_trunc('month', NOW() AT TIME ZONE 'Asia/Kuala_Lumpur') AT TIME ZONE 'Asia/Kuala_Lumpur'
+             AND updated_at < (date_trunc('month', NOW() AT TIME ZONE 'Asia/Kuala_Lumpur') + INTERVAL '1 month') AT TIME ZONE 'Asia/Kuala_Lumpur'`,
+          [session.client_id, session.id]
         );
         const currentMonthUsage = parseInt(usageResult.rows[0]?.count || "0");
         

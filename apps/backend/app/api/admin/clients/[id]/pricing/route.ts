@@ -43,13 +43,15 @@ export async function GET(
       [clientId]
     );
 
-    // Get current month's usage for context
+    // Get current month's billed session count for context
+    // Use Malaysian timezone and count by updated_at (billing time) to match billing logic
     const usageResult = await queryOne<{ usage: string }>(
       `SELECT COUNT(*) as usage
        FROM kyc_session
        WHERE client_id = $1 
-         AND status = 'completed'
-         AND created_at >= date_trunc('month', NOW())`,
+         AND billed = true
+         AND updated_at >= date_trunc('month', NOW() AT TIME ZONE 'Asia/Kuala_Lumpur') AT TIME ZONE 'Asia/Kuala_Lumpur'
+         AND updated_at < (date_trunc('month', NOW() AT TIME ZONE 'Asia/Kuala_Lumpur') + INTERVAL '1 month') AT TIME ZONE 'Asia/Kuala_Lumpur'`,
       [clientId]
     );
 
