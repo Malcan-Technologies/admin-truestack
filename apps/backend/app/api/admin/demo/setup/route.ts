@@ -201,7 +201,7 @@ export async function GET(request: NextRequest) {
        FROM kyc_session
        WHERE client_id = $1
        ORDER BY created_at DESC
-       LIMIT 10`,
+       LIMIT 20`,
       [client.id]
     );
 

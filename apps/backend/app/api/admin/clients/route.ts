@@ -169,7 +169,7 @@ export async function POST(request: NextRequest) {
             [
               newClient.id,
               tierName,
-              tier.minVolume || 0,
+              tier.minVolume || 1, // 1-indexed: first session = 1
               tier.maxVolume || null,
               tier.creditsPerSession || 50, // Default 50 credits (RM 5)
             ]

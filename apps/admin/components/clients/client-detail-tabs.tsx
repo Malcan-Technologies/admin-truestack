@@ -139,7 +139,8 @@ export function ClientDetailTabs({ client }: ClientDetailTabsProps) {
 
   const addPricingTier = () => {
     const lastTier = pricingTiers[pricingTiers.length - 1];
-    const newMinVolume = lastTier ? (lastTier.max_volume || lastTier.min_volume) + 1 : 0;
+    // Session numbers are 1-indexed: if last tier is 1-3, new tier starts at 4
+    const newMinVolume = lastTier ? (lastTier.max_volume || lastTier.min_volume) + 1 : 1;
     setPricingTiers([
       ...pricingTiers,
       {
@@ -659,6 +660,7 @@ export function ClientDetailTabs({ client }: ClientDetailTabsProps) {
               <CardTitle className="text-white">Pricing Tiers</CardTitle>
               <CardDescription className="text-slate-400">
                 Configure volume-based pricing for TrueIdentity KYC sessions.
+                Session numbers are 1-indexed. Tiers reset on the 1st of each month at midnight MYT.
                 Current month usage: {currentMonthUsage} sessions.
               </CardDescription>
             </div>
@@ -712,8 +714,8 @@ export function ClientDetailTabs({ client }: ClientDetailTabsProps) {
                   <TableHeader>
                     <TableRow className="border-slate-800 hover:bg-transparent">
                       <TableHead className="text-slate-400">Tier Name</TableHead>
-                      <TableHead className="text-slate-400">Min Volume</TableHead>
-                      <TableHead className="text-slate-400">Max Volume</TableHead>
+                      <TableHead className="text-slate-400">From Session</TableHead>
+                      <TableHead className="text-slate-400">To Session</TableHead>
                       <TableHead className="text-slate-400">Credits per KYC</TableHead>
                       <TableHead className="text-slate-400">MYR Equivalent</TableHead>
                       <TableHead className="text-right text-slate-400">Actions</TableHead>

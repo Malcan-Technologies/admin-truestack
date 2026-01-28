@@ -464,18 +464,27 @@ export async function POST(
           );
 
           // Get current month's completed session count for this client (for tiered pricing)
+          // Use Malaysian timezone (Asia/Kuala_Lumpur, UTC+8) for monthly reset at midnight MYT
           const usageResult = await queryOne<{ count: string }>(
             `SELECT COUNT(*) as count 
              FROM kyc_session 
              WHERE client_id = $1 
                AND billed = true
-               AND created_at >= date_trunc('month', CURRENT_DATE)
-               AND created_at < date_trunc('month', CURRENT_DATE) + INTERVAL '1 month'`,
+               AND created_at >= date_trunc('month', NOW() AT TIME ZONE 'Asia/Kuala_Lumpur') AT TIME ZONE 'Asia/Kuala_Lumpur'
+               AND created_at < (date_trunc('month', NOW() AT TIME ZONE 'Asia/Kuala_Lumpur') + INTERVAL '1 month') AT TIME ZONE 'Asia/Kuala_Lumpur'`,
             [session.client_id]
           );
           const currentMonthUsage = parseInt(usageResult?.count || "0");
+          
+          // Session number is the count of previously billed sessions + 1 (this session)
+          const sessionNumber = currentMonthUsage + 1;
+          console.log(`[Billing] Client ${session.client_id}: ${currentMonthUsage} billed sessions this month, this is session #${sessionNumber}`);
 
-          // Get the applicable pricing tier based on current usage
+          // Get the applicable pricing tier based on session number (1-indexed)
+          // Tiers use min_volume and max_volume as 1-based session ranges:
+          // - Tier 1 (min=1, max=3): sessions 1, 2, 3
+          // - Tier 2 (min=4, max=6): sessions 4, 5, 6
+          // - Tier 3 (min=7, max=NULL): sessions 7+
           // Credit system: 10 credits = RM 1
           const tierResult = await queryOne<{ credits_per_session: number; tier_name: string }>(
             `SELECT credits_per_session, tier_name
@@ -486,7 +495,7 @@ export async function POST(
                AND (max_volume IS NULL OR max_volume >= $2)
              ORDER BY min_volume DESC
              LIMIT 1`,
-            [session.client_id, currentMonthUsage + 1] // +1 because this session counts
+            [session.client_id, sessionNumber]
           );
 
           // Default to 50 credits (RM 5) if no pricing tier is configured

@@ -399,6 +399,57 @@ export default function TrueIdentityDemoPage() {
     toast.success("Ready for new session");
   }, []);
 
+  // Load a previous session by ID
+  const loadPreviousSession = useCallback(async (sessionId: string) => {
+    if (!sessionId || !demoData?.apiKey?.key) return;
+    
+    // Find session in recent sessions list
+    const sessionInfo = demoData.recentSessions?.find(s => s.id === sessionId);
+    
+    // Set current session with basic info
+    setCurrentSession({
+      id: sessionId,
+      onboarding_url: "", // Not available for past sessions
+      expires_at: "",
+      status: sessionInfo?.status || "unknown",
+    });
+    
+    // Clear previous data
+    setWebhookData(null);
+    setInnovatifStatus(null);
+    
+    // Fetch webhook data from our database
+    try {
+      const data = await apiClient<WebhookData>(`/api/demo/webhook/${sessionId}`);
+      setWebhookData(data);
+      setLastRefresh(new Date());
+      
+      // Also fetch from Innovatif to get the full structured response
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+      try {
+        const response = await fetch(`${apiUrl}/api/v1/kyc/sessions/${sessionId}`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${demoData.apiKey.key}`,
+          },
+        });
+        
+        if (response.ok) {
+          const result = await response.json();
+          setInnovatifStatus(result);
+        }
+      } catch (fetchError) {
+        // Innovatif fetch failed, but we still have database data
+        console.warn("Failed to fetch from Innovatif, using cached data:", fetchError);
+      }
+      
+      toast.success(`Loaded session: ${sessionInfo?.ref_id || sessionId.substring(0, 8)}`);
+    } catch (error) {
+      console.error("Failed to load session:", error);
+      toast.error("Failed to load session data");
+    }
+  }, [demoData?.apiKey?.key, demoData?.recentSessions]);
+
   // Refresh status directly from Innovatif API (simulating what a client would do)
   const refreshFromInnovatif = useCallback(async () => {
     if (!currentSession?.id || !demoData?.apiKey?.key) {
@@ -718,7 +769,7 @@ export default function TrueIdentityDemoPage() {
                     <div>
                       <span className="text-sm font-medium text-white">{tier.tier_name}</span>
                       <span className="ml-2 text-xs text-slate-400">
-                        ({tier.min_volume} - {tier.max_volume !== null ? tier.max_volume : "∞"})
+                        (sessions {tier.min_volume} - {tier.max_volume !== null ? tier.max_volume : "∞"})
                       </span>
                     </div>
                     <span className="font-mono text-sm text-green-400">
@@ -963,58 +1014,122 @@ export default function TrueIdentityDemoPage() {
         {/* Session Status Tab */}
         <TabsContent value="status">
           <Card className="border-slate-800 bg-slate-900/50">
-            <CardHeader className="flex flex-row items-center justify-between">
-              <div>
-                <CardTitle className="text-white">Session Status</CardTitle>
-                <CardDescription className="text-slate-400">
-                  {currentSession ? (
+            <CardHeader className="flex flex-col gap-4">
+              <div className="flex flex-row items-center justify-between">
+                <div>
+                  <CardTitle className="text-white">Session Status</CardTitle>
+                  <CardDescription className="text-slate-400">
+                    {currentSession ? (
+                      <>
+                        Tracking session {currentSession.id.substring(0, 8)}...
+                        {lastRefresh && (
+                          <span className="ml-2 text-xs">
+                            (Last updated: {lastRefresh.toLocaleTimeString()})
+                          </span>
+                        )}
+                      </>
+                    ) : (
+                      "Select a session or create a new one"
+                    )}
+                  </CardDescription>
+                </div>
+                <div className="flex gap-2">
+                  {currentSession && (
                     <>
-                      Tracking session {currentSession.id.substring(0, 8)}...
-                      {lastRefresh && (
-                        <span className="ml-2 text-xs">
-                          (Last updated: {lastRefresh.toLocaleTimeString()})
-                        </span>
-                      )}
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={refreshFromInnovatif}
+                        disabled={refreshingFromInnovatif}
+                        className="border-indigo-500/50 bg-indigo-500/10 text-indigo-300 hover:bg-indigo-500/20 hover:text-indigo-200"
+                      >
+                        <CloudDownload className={`mr-2 h-4 w-4 ${refreshingFromInnovatif ? "animate-pulse" : ""}`} />
+                        {refreshingFromInnovatif ? "Fetching..." : "Fetch from Innovatif"}
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={manualRefresh}
+                        disabled={pollingSession}
+                        className="border-slate-700 bg-transparent text-slate-300 hover:bg-slate-800 hover:text-white"
+                      >
+                        <RefreshCw className={`mr-2 h-4 w-4 ${pollingSession ? "animate-spin" : ""}`} />
+                        Refresh DB
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={clearSession}
+                        className="text-slate-400 hover:text-red-400 hover:bg-red-500/10"
+                      >
+                        Clear
+                      </Button>
                     </>
-                  ) : (
-                    "No active session"
                   )}
-                </CardDescription>
+                </div>
               </div>
-              <div className="flex gap-2">
-                {currentSession && (
-                  <>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={refreshFromInnovatif}
-                      disabled={refreshingFromInnovatif}
-                      className="border-indigo-500/50 bg-indigo-500/10 text-indigo-300 hover:bg-indigo-500/20 hover:text-indigo-200"
-                    >
-                      <CloudDownload className={`mr-2 h-4 w-4 ${refreshingFromInnovatif ? "animate-pulse" : ""}`} />
-                      {refreshingFromInnovatif ? "Fetching..." : "Fetch from Innovatif"}
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={manualRefresh}
-                      disabled={pollingSession}
-                      className="border-slate-700 bg-transparent text-slate-300 hover:bg-slate-800 hover:text-white"
-                    >
-                      <RefreshCw className={`mr-2 h-4 w-4 ${pollingSession ? "animate-spin" : ""}`} />
-                      Refresh DB
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={clearSession}
-                      className="text-slate-400 hover:text-red-400 hover:bg-red-500/10"
-                    >
-                      Clear
-                    </Button>
-                  </>
-                )}
-              </div>
+              
+              {/* Session Selector */}
+              {demoData?.recentSessions && demoData.recentSessions.length > 0 && (
+                <div className="flex items-center gap-3 p-3 rounded-lg border border-slate-700 bg-slate-800/30">
+                  <Label className="text-sm text-slate-400 whitespace-nowrap">Load Session:</Label>
+                  <Select
+                    value={currentSession?.id || ""}
+                    onValueChange={(value) => {
+                      if (value) {
+                        loadPreviousSession(value);
+                      }
+                    }}
+                  >
+                    <SelectTrigger className="flex-1 border-slate-700 bg-slate-800 text-white">
+                      <SelectValue placeholder="Select a previous session..." />
+                    </SelectTrigger>
+                    <SelectContent className="border-slate-700 bg-slate-800">
+                      {demoData.recentSessions.map((session) => (
+                        <SelectItem
+                          key={session.id}
+                          value={session.id}
+                          className="text-slate-200 focus:bg-slate-700 focus:text-white"
+                        >
+                          <div className="flex items-center gap-2">
+                            <span className="font-mono text-xs">{session.ref_id}</span>
+                            <Badge
+                              variant="outline"
+                              className={
+                                session.status === "completed"
+                                  ? session.result === "approved"
+                                    ? "border-green-500/30 bg-green-500/10 text-green-400"
+                                    : "border-red-500/30 bg-red-500/10 text-red-400"
+                                  : session.status === "expired"
+                                  ? "border-orange-500/30 bg-orange-500/10 text-orange-400"
+                                  : "border-yellow-500/30 bg-yellow-500/10 text-yellow-400"
+                              }
+                            >
+                              {session.status === "completed"
+                                ? session.result === "approved"
+                                  ? "Approved"
+                                  : "Rejected"
+                                : session.status}
+                            </Badge>
+                            <span className="text-xs text-slate-500">
+                              {new Date(session.created_at).toLocaleDateString()}
+                            </span>
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => fetchDemoSetup()}
+                    className="border-slate-700 bg-transparent text-slate-400 hover:bg-slate-800 hover:text-white"
+                    title="Refresh session list"
+                  >
+                    <RefreshCw className="h-4 w-4" />
+                  </Button>
+                </div>
+              )}
             </CardHeader>
             <CardContent>
               {webhookData?.session ? (
@@ -1428,8 +1543,12 @@ export default function TrueIdentityDemoPage() {
               ) : (
                 <div className="flex flex-col items-center justify-center py-12">
                   <Clock className="h-12 w-12 text-slate-600 mb-4" />
-                  <p className="text-slate-400">No active session</p>
-                  <p className="text-sm text-slate-500">Create a session first</p>
+                  <p className="text-slate-400">No session selected</p>
+                  <p className="text-sm text-slate-500">
+                    {demoData?.recentSessions && demoData.recentSessions.length > 0
+                      ? "Select a previous session from the dropdown above, or create a new one"
+                      : "Create a session in the KYC Form tab to get started"}
+                  </p>
                 </div>
               )}
             </CardContent>

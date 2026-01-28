@@ -123,9 +123,10 @@ export function NewClientModal({ trigger }: NewClientModalProps) {
   });
 
   // Step 3: Pricing configuration (10 credits = RM 1)
+  // Session numbers are 1-indexed: minVolume=1 means "starting from session 1"
   const [pricingConfig, setPricingConfig] = useState<PricingConfig>({
     allowOverdraft: true,
-    tiers: [{ tierName: "Standard", minVolume: 0, maxVolume: null, creditsPerSession: 50 }], // 50 credits = RM 5
+    tiers: [{ tierName: "Standard", minVolume: 1, maxVolume: null, creditsPerSession: 50 }], // 50 credits = RM 5
   });
 
   // Step 4: Credits configuration
@@ -146,7 +147,7 @@ export function NewClientModal({ trigger }: NewClientModalProps) {
     setApiKeyConfig({ generate: true, environment: "live" });
     setPricingConfig({
       allowOverdraft: true,
-      tiers: [{ tierName: "Standard", minVolume: 0, maxVolume: null, creditsPerSession: 50 }],
+      tiers: [{ tierName: "Standard", minVolume: 1, maxVolume: null, creditsPerSession: 50 }],
     });
     setCreditsConfig({ amount: "", type: "included" });
     setCurrentStep(0);
@@ -629,7 +630,8 @@ function PricingStep({
 }) {
   const addTier = () => {
     const lastTier = config.tiers[config.tiers.length - 1];
-    const newMinVolume = lastTier ? (lastTier.maxVolume ?? lastTier.minVolume) + 1 : 0;
+    // Session numbers are 1-indexed: if last tier is 1-3, new tier starts at 4
+    const newMinVolume = lastTier ? (lastTier.maxVolume ?? lastTier.minVolume) + 1 : 1;
     onChange({
       ...config,
       tiers: [
@@ -727,8 +729,8 @@ function PricingStep({
           <div className="space-y-4">
             <div className="rounded-lg border border-slate-700 bg-slate-800/50 p-3">
               <p className="text-xs text-slate-500">
-                Pricing is applied based on monthly volume. Set min/max volume ranges and price per KYC session.
-                Leave Max Volume empty for unlimited.
+                Pricing is applied based on monthly session count. Session numbers are 1-indexed (first session = 1).
+                Leave Max Session empty for unlimited. Tiers reset on the 1st of each month at midnight MYT.
               </p>
             </div>
 
@@ -736,8 +738,8 @@ function PricingStep({
               <TableHeader>
                 <TableRow className="border-slate-800 hover:bg-transparent">
                   <TableHead className="text-slate-400">Tier Name</TableHead>
-                  <TableHead className="text-slate-400">Min Volume</TableHead>
-                  <TableHead className="text-slate-400">Max Volume</TableHead>
+                  <TableHead className="text-slate-400">From Session</TableHead>
+                  <TableHead className="text-slate-400">To Session</TableHead>
                   <TableHead className="text-slate-400">Credits per KYC</TableHead>
                   <TableHead className="text-slate-400">MYR Equivalent</TableHead>
                   <TableHead className="text-right text-slate-400 w-16">Actions</TableHead>
@@ -1005,7 +1007,7 @@ function ReviewStep({
               <div className="mt-2 text-xs text-slate-500">
                 {pricingConfig.tiers.map((tier, i) => (
                   <div key={i}>
-                    {tier.tierName}: {tier.minVolume}-{tier.maxVolume ?? "∞"} @ {tier.creditsPerSession} credits (RM {(tier.creditsPerSession / 10).toFixed(2)})
+                    {tier.tierName}: sessions {tier.minVolume}-{tier.maxVolume ?? "∞"} @ {tier.creditsPerSession} credits (RM {(tier.creditsPerSession / 10).toFixed(2)})
                   </div>
                 ))}
               </div>

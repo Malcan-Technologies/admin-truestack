@@ -104,10 +104,11 @@ export async function POST(
 
     // Validate tier structure
     // Credit system: 10 credits = RM 1
+    // Session numbers are 1-indexed (first session = 1)
     for (const tier of tiers) {
-      if (typeof tier.minVolume !== "number" || tier.minVolume < 0) {
+      if (typeof tier.minVolume !== "number" || tier.minVolume < 1) {
         return NextResponse.json(
-          { error: "Invalid minVolume in tier" },
+          { error: "Invalid minVolume in tier - must be at least 1 (session numbers are 1-indexed)" },
           { status: 400 }
         );
       }
