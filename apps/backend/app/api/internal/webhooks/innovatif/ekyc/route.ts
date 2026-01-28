@@ -38,8 +38,12 @@ interface InnovatifWebhookPayload {
 
 // POST /api/internal/webhooks/innovatif/ekyc
 export async function POST(request: NextRequest) {
+  console.log("[Innovatif Webhook] Received webhook request");
+  console.log("[Innovatif Webhook] Headers:", Object.fromEntries(request.headers.entries()));
+  
   try {
     const body = await request.json();
+    console.log("[Innovatif Webhook] Body keys:", Object.keys(body));
     
     // Handle encrypted payload
     let payload: InnovatifWebhookPayload;
@@ -202,16 +206,58 @@ export async function POST(request: NextRequest) {
       );
 
       // Map Innovatif status to our status
+      // Innovatif status values:
+      //   0 = URL Not opened (user hasn't started)
+      //   1 = Processing (user is completing KYC)
+      //   2 = Completed (KYC finished - BILLABLE)
+      //   3 = Expired (session timed out)
+      // Innovatif result values:
+      //   0 = Rejected
+      //   1 = Approved
+      //   2 = Not Available
       let ourStatus = "processing";
-      let ourResult = null;
+      let ourResult: string | null = null;
 
-      if (status === "completed" || status === "success") {
-        ourStatus = "completed";
-        ourResult = result === "PASS" || result === "approved" ? "approved" : "rejected";
-      } else if (status === "expired" || status === "failed") {
-        ourStatus = "expired";
-        ourResult = "rejected";
+      // Convert to number for comparison (Innovatif sends integers)
+      const statusNum = typeof status === "string" ? parseInt(status) : status;
+      const resultNum = typeof result === "string" ? parseInt(result) : result;
+
+      switch (statusNum) {
+        case 0:
+          // URL Not opened - user hasn't started
+          ourStatus = "pending";
+          ourResult = null;
+          break;
+        case 1:
+          // Processing - user is completing KYC
+          ourStatus = "processing";
+          ourResult = null;
+          break;
+        case 2:
+          // Completed - KYC finished (BILLABLE)
+          ourStatus = "completed";
+          // Result: 0 = Rejected, 1 = Approved, 2 = Not Available
+          if (resultNum === 1) {
+            ourResult = "approved";
+          } else if (resultNum === 0) {
+            ourResult = "rejected";
+          } else {
+            // resultNum === 2 or undefined - treat as rejected
+            ourResult = "rejected";
+          }
+          break;
+        case 3:
+          // Expired - session timed out (NOT billable)
+          ourStatus = "expired";
+          ourResult = null;
+          break;
+        default:
+          console.warn(`Unknown Innovatif status: ${statusNum}`);
+          ourStatus = "processing";
+          ourResult = null;
       }
+
+      console.log(`Innovatif webhook: status=${status} (${statusNum}), result=${result} (${resultNum}) -> ourStatus=${ourStatus}, ourResult=${ourResult}`);
 
       // Build Innovatif response object (without images)
       const innovatifResponse: Record<string, unknown> = {
@@ -274,8 +320,9 @@ export async function POST(request: NextRequest) {
       // Wait for all uploads
       await Promise.all(uploadPromises);
 
-      // Determine if this is a billable completion (completed or expired/failed, not already billed)
-      const isBillable = (ourStatus === "completed" || ourStatus === "expired") && !session.billed;
+      // Determine if this is a billable completion
+      // Only bill on status = 2 (Completed), NOT on expired sessions
+      const isBillable = ourStatus === "completed" && !session.billed;
 
       // Update session (include billed flag if billable)
       await txClient.query(

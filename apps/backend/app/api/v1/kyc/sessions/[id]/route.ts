@@ -278,28 +278,68 @@ export async function POST(
       });
 
       // Map Innovatif status to our status
+      // Innovatif status values:
+      //   0 = URL Not opened (user hasn't started)
+      //   1 = Processing (user is completing KYC)
+      //   2 = Completed (KYC finished - BILLABLE)
+      //   3 = Expired (session timed out)
+      // Innovatif result values:
+      //   0 = Rejected
+      //   1 = Approved
+      //   2 = Not Available
       let ourStatus = session.status;
-      let ourResult = session.result;
+      let ourResult: string | null = session.result;
       let rejectMessage: string | null = null;
 
-      // Innovatif status codes: 1=pending, 2=completed, 3=expired
-      // Innovatif result: 1=approved/PASS, 0=rejected/FAIL
-      if (innovatifStatus.status === "2" || innovatifStatus.status === "completed") {
-        ourStatus = "completed";
-        const resultValue = innovatifStatus.result || innovatifStatus.data?.result;
-        ourResult = resultValue === "1" || resultValue === "PASS" || resultValue === "approved" 
-          ? "approved" 
-          : "rejected";
-        
-        if (ourResult === "rejected" && innovatifStatus.data?.reject_message) {
-          rejectMessage = String(innovatifStatus.data.reject_message);
-        }
-      } else if (innovatifStatus.status === "3" || innovatifStatus.status === "expired") {
-        ourStatus = "expired";
-        ourResult = "rejected";
-      } else if (innovatifStatus.status === "1" || innovatifStatus.status === "pending") {
-        ourStatus = "pending";
+      // Convert to number for comparison (Innovatif may send integers or strings)
+      const statusNum = typeof innovatifStatus.status === "string" 
+        ? parseInt(innovatifStatus.status) 
+        : innovatifStatus.status;
+      const resultValue = innovatifStatus.result ?? innovatifStatus.data?.result;
+      const resultNum = typeof resultValue === "string" 
+        ? parseInt(resultValue) 
+        : resultValue;
+
+      console.log(`Innovatif get-status: status=${innovatifStatus.status} (${statusNum}), result=${resultValue} (${resultNum})`);
+
+      switch (statusNum) {
+        case 0:
+          // URL Not opened - user hasn't started
+          ourStatus = "pending";
+          ourResult = null;
+          break;
+        case 1:
+          // Processing - user is completing KYC
+          ourStatus = "processing";
+          ourResult = null;
+          break;
+        case 2:
+          // Completed - KYC finished (BILLABLE)
+          ourStatus = "completed";
+          // Result: 0 = Rejected, 1 = Approved, 2 = Not Available
+          if (resultNum === 1) {
+            ourResult = "approved";
+          } else if (resultNum === 0) {
+            ourResult = "rejected";
+            if (innovatifStatus.data?.reject_message) {
+              rejectMessage = String(innovatifStatus.data.reject_message);
+            }
+          } else {
+            // resultNum === 2 or undefined - treat as rejected
+            ourResult = "rejected";
+          }
+          break;
+        case 3:
+          // Expired - session timed out (NOT billable)
+          ourStatus = "expired";
+          ourResult = null;
+          break;
+        default:
+          console.warn(`Unknown Innovatif status: ${statusNum}`);
+          // Keep existing status
       }
+
+      console.log(`Mapped to: ourStatus=${ourStatus}, ourResult=${ourResult}`);
 
       // S3 paths for images
       let s3FrontDocument: string | null = null;
@@ -380,8 +420,9 @@ export async function POST(
         } : undefined,
       } : null;
 
-      // Determine if this is a billable completion (completed or expired, not already billed)
-      const isBillable = (ourStatus === "completed" || ourStatus === "expired") && !session.billed;
+      // Determine if this is a billable completion
+      // Only bill on status = 2 (Completed), NOT on expired sessions
+      const isBillable = ourStatus === "completed" && !session.billed;
 
       // Update session with status, S3 paths, and billing flag
       await query(

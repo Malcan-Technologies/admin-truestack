@@ -131,6 +131,12 @@ export async function createInnovatifTransaction(
 
   // Build request body per Innovatif API spec
   // Default platform to "Web" if not specified
+  const webhookUrl = `${backendUrl}/api/internal/webhooks/innovatif/ekyc`;
+  const responseUrl = `${redirectBaseUrl}/r/${params.sessionId}`;
+  
+  console.log(`[Innovatif] Creating transaction with webhook URL: ${webhookUrl}`);
+  console.log(`[Innovatif] Response URL: ${responseUrl}`);
+  
   const requestBody = {
     api_key: API_KEY,
     package_name: PACKAGE_NAME,
@@ -140,9 +146,9 @@ export async function createInnovatifTransaction(
     document_type: params.documentType,
     platform: params.platform || "Web",
     signature: signature,
-    response_url: `${redirectBaseUrl}/r/${params.sessionId}`,
-    backend_url: `${backendUrl}/api/internal/webhooks/innovatif/ekyc`,
-    callback_mode: "1", // Summary mode
+    response_url: responseUrl,
+    backend_url: webhookUrl,
+    callback_mode: "2", // Detail mode - matches get-status API response format
     response_mode: "1", // With queries
     request_time: requestTime,
   };
