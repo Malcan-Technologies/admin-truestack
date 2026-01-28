@@ -44,20 +44,49 @@ export function TopupCreditsModal({
   const [success, setSuccess] = useState(false);
 
   const [formData, setFormData] = useState({
-    amount: "",
+    amount: "", // In credits
+    amountMYR: "", // In MYR (for display convenience)
+    inputMode: "credits" as "credits" | "myr",
     type: "topup" as "topup" | "adjustment" | "refund" | "included",
     description: "",
   });
 
+  // Credit system: 10 credits = RM 1
+  const CREDITS_PER_MYR = 10;
+
   const resetForm = () => {
     setFormData({
       amount: "",
+      amountMYR: "",
+      inputMode: "credits",
       type: "topup",
       description: "",
     });
     setError("");
     setLoading(false);
     setSuccess(false);
+  };
+
+  // Convert between credits and MYR
+  const handleAmountChange = (value: string, mode: "credits" | "myr") => {
+    if (mode === "credits") {
+      const credits = parseInt(value) || 0;
+      setFormData((prev) => ({
+        ...prev,
+        amount: value,
+        amountMYR: credits ? (credits / CREDITS_PER_MYR).toFixed(2) : "",
+        inputMode: "credits",
+      }));
+    } else {
+      const myr = parseFloat(value) || 0;
+      const credits = Math.round(myr * CREDITS_PER_MYR);
+      setFormData((prev) => ({
+        ...prev,
+        amount: credits ? credits.toString() : "",
+        amountMYR: value,
+        inputMode: "myr",
+      }));
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -132,8 +161,11 @@ export function TopupCreditsModal({
               <p className="text-lg font-semibold text-green-400">
                 +{parseInt(formData.amount).toLocaleString()} credits
               </p>
-              <p className="mt-1 text-sm text-slate-400">
-                New balance: {newBalance.toLocaleString()}
+              <p className="text-sm text-slate-400">
+                (RM {(parseInt(formData.amount) / CREDITS_PER_MYR).toFixed(2)})
+              </p>
+              <p className="mt-2 text-sm text-slate-400">
+                New balance: {newBalance.toLocaleString()} credits (RM {(newBalance / CREDITS_PER_MYR).toFixed(2)})
               </p>
             </div>
           </div>
@@ -147,10 +179,18 @@ export function TopupCreditsModal({
 
             <div className="rounded-lg border border-slate-700 bg-slate-800/50 p-4">
               <div className="flex items-center justify-between">
-                <span className="text-sm text-slate-400">Current Balance</span>
-                <span className="text-xl font-semibold text-white">
-                  {currentBalance.toLocaleString()}
-                </span>
+                <div>
+                  <span className="text-sm text-slate-400">Current Balance</span>
+                  <p className="text-xs text-slate-500">10 credits = RM 1</p>
+                </div>
+                <div className="text-right">
+                  <span className="text-xl font-semibold text-white">
+                    {currentBalance.toLocaleString()} credits
+                  </span>
+                  <p className="text-sm text-slate-400">
+                    (RM {(currentBalance / CREDITS_PER_MYR).toFixed(2)})
+                  </p>
+                </div>
               </div>
             </div>
 
@@ -185,22 +225,41 @@ export function TopupCreditsModal({
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="amount" className="text-slate-200">
+              <Label className="text-slate-200">
                 Amount <span className="text-red-400">*</span>
               </Label>
-              <Input
-                id="amount"
-                type="number"
-                placeholder="100"
-                value={formData.amount}
-                onChange={(e) =>
-                  setFormData((prev) => ({ ...prev, amount: e.target.value }))
-                }
-                required
-                className="border-slate-700 bg-slate-800 text-white placeholder:text-slate-500"
-              />
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label htmlFor="amountMYR" className="text-xs text-slate-400 mb-1 block">
+                    MYR
+                  </Label>
+                  <Input
+                    id="amountMYR"
+                    type="number"
+                    step="0.01"
+                    placeholder="10.00"
+                    value={formData.amountMYR}
+                    onChange={(e) => handleAmountChange(e.target.value, "myr")}
+                    className="border-slate-700 bg-slate-800 text-white placeholder:text-slate-500"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="amount" className="text-xs text-slate-400 mb-1 block">
+                    Credits (10 credits = RM 1)
+                  </Label>
+                  <Input
+                    id="amount"
+                    type="number"
+                    placeholder="100"
+                    value={formData.amount}
+                    onChange={(e) => handleAmountChange(e.target.value, "credits")}
+                    required
+                    className="border-slate-700 bg-slate-800 text-white placeholder:text-slate-500"
+                  />
+                </div>
+              </div>
               <p className="text-xs text-slate-500">
-                Enter positive number to add credits, negative to deduct.
+                Enter positive number to add credits, negative to deduct. 10 credits = RM 1.
               </p>
             </div>
 
@@ -208,13 +267,18 @@ export function TopupCreditsModal({
               <div className="rounded-lg border border-slate-700 bg-slate-800/50 p-4">
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-slate-400">New Balance</span>
-                  <span
-                    className={`text-xl font-semibold ${
-                      newBalance >= 0 ? "text-green-400" : "text-red-400"
-                    }`}
-                  >
-                    {newBalance.toLocaleString()}
-                  </span>
+                  <div className="text-right">
+                    <span
+                      className={`text-xl font-semibold ${
+                        newBalance >= 0 ? "text-green-400" : "text-red-400"
+                      }`}
+                    >
+                      {newBalance.toLocaleString()} credits
+                    </span>
+                    <p className="text-sm text-slate-400">
+                      (RM {(newBalance / CREDITS_PER_MYR).toFixed(2)})
+                    </p>
+                  </div>
                 </div>
               </div>
             )}

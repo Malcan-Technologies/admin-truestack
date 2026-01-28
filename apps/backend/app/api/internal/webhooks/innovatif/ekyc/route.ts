@@ -83,13 +83,17 @@ export async function POST(request: NextRequest) {
     if (INNOVATIF_PACKAGE_NAME) {
       // Convert package name format: "truestack.gateway.test" -> "truestack_gateway_test"
       const packagePrefix = INNOVATIF_PACKAGE_NAME.replace(/\./g, "_");
+      // Also handle case where "test" is replaced with "trial": "truestack_gateway_trial"
+      const packagePrefixTrial = packagePrefix.replace(/_test$/, "_trial");
       
       // Check for various prefix patterns Innovatif might use
       const possiblePrefixes = [
-        INNOVATIF_PACKAGE_NAME,           // Original format
-        packagePrefix,                     // Underscores instead of dots
+        INNOVATIF_PACKAGE_NAME,           // Original format: truestack.gateway.test
+        packagePrefix,                     // Underscores: truestack_gateway_test
+        packagePrefixTrial,               // Trial variant: truestack_gateway_trial
         `${packagePrefix}trial`,          // With "trial" suffix (no underscore)
         `${packagePrefix}_trial`,         // With "_trial" suffix
+        `${packagePrefixTrial}_`,         // Trial with trailing underscore
       ];
       
       for (const prefix of possiblePrefixes) {
@@ -324,8 +328,9 @@ export async function POST(request: NextRequest) {
 
         // Get the applicable pricing tier based on current usage
         // Find the tier where current usage falls within min_volume and max_volume
-        const tierResult = await txClient.query<{ price_per_unit: string; tier_name: string }>(
-          `SELECT price_per_unit, tier_name
+        // Credit system: 10 credits = RM 1
+        const tierResult = await txClient.query<{ credits_per_session: number; tier_name: string }>(
+          `SELECT credits_per_session, tier_name
            FROM pricing_tier
            WHERE client_id = $1 
              AND product_id = 'true_identity'
@@ -336,16 +341,16 @@ export async function POST(request: NextRequest) {
           [session.client_id, currentMonthUsage + 1] // +1 because this session counts
         );
 
-        // Default to 1 credit if no pricing tier is configured
-        let pricePerUnit = 1;
+        // Default to 50 credits (RM 5) if no pricing tier is configured
+        let creditsToDeduct = 50;
         let tierName = "default";
         
         if (tierResult.rows[0]) {
-          pricePerUnit = parseFloat(tierResult.rows[0].price_per_unit);
+          creditsToDeduct = tierResult.rows[0].credits_per_session;
           tierName = tierResult.rows[0].tier_name;
         }
 
-        // Get current balance
+        // Get current balance (in credits)
         const balanceResult = await txClient.query<{ balance: string }>(
           `SELECT COALESCE(SUM(amount), 0) as balance 
            FROM credit_ledger 
@@ -353,24 +358,24 @@ export async function POST(request: NextRequest) {
           [session.client_id]
         );
 
-        const currentBalance = parseFloat(balanceResult.rows[0]?.balance || "0");
-        const newBalance = currentBalance - pricePerUnit;
+        const currentBalance = parseInt(balanceResult.rows[0]?.balance || "0");
+        const newBalance = currentBalance - creditsToDeduct;
 
-        // Deduct credit based on pricing tier
+        // Deduct credits based on pricing tier
         await txClient.query(
           `INSERT INTO credit_ledger 
             (client_id, product_id, amount, balance_after, type, reference_id, description)
            VALUES ($1, 'true_identity', $2, $3, 'usage', $4, $5)`,
           [
             session.client_id,
-            -pricePerUnit, // Negative amount for deduction
+            -creditsToDeduct, // Negative amount for deduction
             newBalance,
             session.id,
-            `KYC session ${ourResult === "approved" ? "approved" : "rejected"} (${tierName}: ${pricePerUnit} credits)`,
+            `KYC session ${ourResult === "approved" ? "approved" : "rejected"} (${tierName}: ${creditsToDeduct} credits)`,
           ]
         );
 
-        console.log(`Billed session ${session.id}: status=${ourStatus}, result=${ourResult}, tier=${tierName}, price=${pricePerUnit}, new_balance=${newBalance}`);
+        console.log(`Billed session ${session.id}: status=${ourStatus}, result=${ourResult}, tier=${tierName}, credits=${creditsToDeduct}, new_balance=${newBalance}`);
       }
     });
 

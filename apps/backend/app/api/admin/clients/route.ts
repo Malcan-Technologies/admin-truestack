@@ -157,20 +157,21 @@ export async function POST(request: NextRequest) {
       );
 
       // Create pricing tiers if provided
+      // Credit system: 10 credits = RM 1
       if (Array.isArray(pricingTiers) && pricingTiers.length > 0) {
         for (let i = 0; i < pricingTiers.length; i++) {
           const tier = pricingTiers[i];
           const tierName = tier.tierName || `Tier ${i + 1}`;
           await txClient.query(
             `INSERT INTO pricing_tier 
-              (client_id, product_id, tier_name, min_volume, max_volume, price_per_unit)
+              (client_id, product_id, tier_name, min_volume, max_volume, credits_per_session)
              VALUES ($1, 'true_identity', $2, $3, $4, $5)`,
             [
               newClient.id,
               tierName,
               tier.minVolume || 0,
               tier.maxVolume || null,
-              tier.pricePerUnit || 1,
+              tier.creditsPerSession || 50, // Default 50 credits (RM 5)
             ]
           );
         }

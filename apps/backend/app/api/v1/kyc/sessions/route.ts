@@ -78,7 +78,7 @@ async function checkCredits(
   clientId: string,
   productId: string,
   allowOverdraft: boolean
-): Promise<{ success: boolean; balance: number; minPrice: number; error?: string }> {
+): Promise<{ success: boolean; balance: number; minCredits: number; error?: string }> {
   // Get current balance
   const balanceResult = await queryOne<{ balance: string }>(
     `SELECT COALESCE(SUM(amount), 0) as balance 
@@ -102,8 +102,9 @@ async function checkCredits(
   const currentMonthUsage = parseInt(usageResult?.count || "0");
 
   // Get the applicable pricing tier based on current usage
-  const tierResult = await queryOne<{ price_per_unit: string }>(
-    `SELECT price_per_unit
+  // Credit system: 10 credits = RM 1
+  const tierResult = await queryOne<{ credits_per_session: number }>(
+    `SELECT credits_per_session
      FROM pricing_tier
      WHERE client_id = $1 
        AND product_id = $2
@@ -114,20 +115,20 @@ async function checkCredits(
     [clientId, productId, currentMonthUsage + 1]
   );
 
-  // Default to 1 credit if no pricing tier is configured
-  const minPrice = tierResult ? parseFloat(tierResult.price_per_unit) : 1;
+  // Default to 50 credits (RM 5) if no pricing tier is configured
+  const minCredits = tierResult ? tierResult.credits_per_session : 50;
 
   // Check if sufficient credits (unless overdraft allowed)
-  if (currentBalance < minPrice && !allowOverdraft) {
+  if (currentBalance < minCredits && !allowOverdraft) {
     return {
       success: false,
       balance: currentBalance,
-      minPrice,
-      error: `Insufficient credits. Need ${minPrice} credits, have ${currentBalance}`,
+      minCredits,
+      error: `Insufficient credits. Need ${minCredits} credits, have ${currentBalance}`,
     };
   }
 
-  return { success: true, balance: currentBalance, minPrice };
+  return { success: true, balance: currentBalance, minCredits };
 }
 
 // Generate unique ref_id for Innovatif (max 32 characters)
@@ -289,11 +290,12 @@ export async function POST(request: NextRequest) {
       );
 
       // Update session with Innovatif response
+      // Store both onboarding_id and the prefixed ref_id (needed for get-status API)
       await query(
         `UPDATE kyc_session 
-         SET innovatif_onboarding_id = $1, status = 'pending'
-         WHERE id = $2`,
-        [innovatifResult.onboardingId, session.id]
+         SET innovatif_onboarding_id = $1, innovatif_ref_id = $2, status = 'pending'
+         WHERE id = $3`,
+        [innovatifResult.onboardingId, innovatifResult.innovatifRefId || null, session.id]
       );
 
       return NextResponse.json(

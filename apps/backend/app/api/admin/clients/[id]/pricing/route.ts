@@ -26,16 +26,17 @@ export async function GET(
     }
 
     // Get pricing tiers
+    // Credit system: 10 credits = RM 1
     const tiers = await query<{
       id: string;
       tier_name: string;
       min_volume: number;
       max_volume: number | null;
-      price_per_unit: string;
+      credits_per_session: number;
       created_at: string;
       updated_at: string;
     }>(
-      `SELECT id, tier_name, min_volume, max_volume, price_per_unit, created_at, updated_at
+      `SELECT id, tier_name, min_volume, max_volume, credits_per_session, created_at, updated_at
        FROM pricing_tier
        WHERE client_id = $1 AND product_id = 'true_identity'
        ORDER BY min_volume ASC`,
@@ -102,6 +103,7 @@ export async function POST(
     }
 
     // Validate tier structure
+    // Credit system: 10 credits = RM 1
     for (const tier of tiers) {
       if (typeof tier.minVolume !== "number" || tier.minVolume < 0) {
         return NextResponse.json(
@@ -115,9 +117,9 @@ export async function POST(
           { status: 400 }
         );
       }
-      if (typeof tier.pricePerUnit !== "number" || tier.pricePerUnit < 0) {
+      if (typeof tier.creditsPerSession !== "number" || tier.creditsPerSession < 1 || !Number.isInteger(tier.creditsPerSession)) {
         return NextResponse.json(
-          { error: "Invalid pricePerUnit in tier" },
+          { error: "Invalid creditsPerSession in tier - must be a positive integer" },
           { status: 400 }
         );
       }
@@ -152,18 +154,18 @@ export async function POST(
           tier_name: string;
           min_volume: number;
           max_volume: number | null;
-          price_per_unit: string;
+          credits_per_session: number;
         }>(
           `INSERT INTO pricing_tier 
-            (client_id, product_id, tier_name, min_volume, max_volume, price_per_unit)
+            (client_id, product_id, tier_name, min_volume, max_volume, credits_per_session)
            VALUES ($1, 'true_identity', $2, $3, $4, $5)
-           RETURNING id, tier_name, min_volume, max_volume, price_per_unit`,
+           RETURNING id, tier_name, min_volume, max_volume, credits_per_session`,
           [
             clientId,
             tierName,
             tier.minVolume,
             tier.maxVolume || null,
-            tier.pricePerUnit,
+            tier.creditsPerSession,
           ]
         );
 

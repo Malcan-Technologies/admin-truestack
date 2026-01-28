@@ -121,6 +121,7 @@ export async function createInnovatifTransaction(
 ): Promise<{
   onboardingId: string;
   onboardingUrl: string;
+  innovatifRefId?: string; // Prefixed ref_id from Innovatif - use for get-status API
 }> {
   const requestTime = formatRequestTime();
   const signature = generateSignature(params.refId, requestTime);
@@ -197,9 +198,11 @@ export async function createInnovatifTransaction(
     }
   }
 
-  // Extract onboarding URL and ID
+  // Extract onboarding URL, ID, and prefixed ref_id
   const onboardingUrl = responseData.onboarding_url || responseData.url;
-  const onboardingId = responseData.onboarding_id || responseData.transaction_id || responseData.ref_id;
+  const onboardingId = responseData.onboarding_id || responseData.transaction_id;
+  // Innovatif prepends a prefix to our ref_id - we need to store this for get-status API
+  const prefixedRefId = responseData.ref_id;
 
   if (!onboardingUrl || !onboardingId) {
     console.error("Missing onboarding data in response:", responseData);
@@ -209,13 +212,24 @@ export async function createInnovatifTransaction(
   return {
     onboardingId: String(onboardingId),
     onboardingUrl: String(onboardingUrl),
+    // The prefixed ref_id from Innovatif - use this for get-status API calls
+    innovatifRefId: prefixedRefId ? String(prefixedRefId) : undefined,
   };
 }
 
 /**
  * Get transaction status from Innovatif
+ * @param refId - Our reference ID for the session
+ * @param onboardingId - Innovatif's onboarding ID (required per their API docs)
+ * @param platform - Platform used for the session (Web/iOS/Android)
+ * @param mode - Response mode: 1=Summary (recommended), 2=Detail with images
  */
-export async function getInnovatifTransactionStatus(refId: string): Promise<{
+export async function getInnovatifTransactionStatus(
+  refId: string,
+  onboardingId: string,
+  platform: InnovatifPlatform = "Web",
+  mode: 1 | 2 = 1
+): Promise<{
   status: string;
   result?: string;
   data?: Record<string, unknown>;
@@ -223,12 +237,16 @@ export async function getInnovatifTransactionStatus(refId: string): Promise<{
   const requestTime = formatRequestTime();
   const signature = generateSignature(refId, requestTime);
 
+  // All fields are mandatory per Innovatif API docs
   const requestBody = {
     api_key: API_KEY,
     package_name: PACKAGE_NAME,
     ref_id: refId,
+    onboarding_id: onboardingId,
+    platform: platform,
     signature: signature,
     request_time: requestTime,
+    mode: mode,
   };
 
   const encryptedData = encryptRequest(requestBody);
@@ -250,10 +268,17 @@ export async function getInnovatifTransactionStatus(refId: string): Promise<{
 
   const result = await response.json() as InnovatifApiResponse;
 
+  // Check for API-level errors (unencrypted error responses)
+  if (result.success === false && typeof result.data === "object") {
+    const errorData = result.data as { message?: string };
+    throw new Error(errorData.message || "Innovatif API returned error");
+  }
+
   let responseData: Record<string, unknown> = result;
   if (result.data && typeof result.data === "string") {
     try {
       responseData = decryptResponse(result.data) as Record<string, unknown>;
+      console.log("Innovatif get-status response:", responseData);
     } catch (e) {
       console.warn("Response decryption failed, using raw response");
     }

@@ -171,14 +171,15 @@ export async function GET(request: NextRequest) {
     }
 
     // Get pricing tiers for demo client
+    // Credit system: 10 credits = RM 1
     const pricingTiers = await query<{
       id: string;
       tier_name: string;
       min_volume: number;
       max_volume: number | null;
-      price_per_unit: string;
+      credits_per_session: number;
     }>(
-      `SELECT id, tier_name, min_volume, max_volume, price_per_unit
+      `SELECT id, tier_name, min_volume, max_volume, credits_per_session
        FROM pricing_tier
        WHERE client_id = $1 AND product_id = 'true_identity'
        ORDER BY min_volume ASC`,

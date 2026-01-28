@@ -128,6 +128,19 @@ This document explains how billing, webhooks, and the KYC session lifecycle work
 
 ## Billing System
 
+### Credit System
+
+TrueStack uses a credit-based billing system:
+
+| Conversion | Value |
+|------------|-------|
+| **10 credits** | **RM 1.00** |
+| 1 credit | RM 0.10 |
+| 100 credits | RM 10.00 |
+| 1,000 credits | RM 100.00 |
+
+When clients top up, they purchase credits. When KYC sessions complete, credits are deducted based on the configured pricing tier.
+
 ### When Billing Occurs
 
 Credits are **only deducted when a KYC session completes** (either approved or rejected). This means:
@@ -143,19 +156,19 @@ Credits are **only deducted when a KYC session completes** (either approved or r
 
 ### Tiered Pricing
 
-Each client can have volume-based pricing tiers:
+Each client can have volume-based pricing tiers configured in **credits per session**:
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                    Example Pricing Tiers                     │
-├─────────────────┬─────────────────┬─────────────────────────┤
-│     Tier        │   Volume/Month  │   Price per Session     │
-├─────────────────┼─────────────────┼─────────────────────────┤
-│   Tier 1        │   0 - 100       │   5.00 credits          │
-│   Tier 2        │   101 - 500     │   4.00 credits          │
-│   Tier 3        │   501 - 1000    │   3.50 credits          │
-│   Tier 4        │   1001+         │   3.00 credits          │
-└─────────────────┴─────────────────┴─────────────────────────┘
+┌───────────────────────────────────────────────────────────────────────────┐
+│                         Example Pricing Tiers                              │
+├─────────────────┬─────────────────┬─────────────────┬─────────────────────┤
+│     Tier        │   Volume/Month  │   Credits/KYC   │   MYR Equivalent    │
+├─────────────────┼─────────────────┼─────────────────┼─────────────────────┤
+│   Tier 1        │   0 - 100       │   50 credits    │   RM 5.00           │
+│   Tier 2        │   101 - 500     │   45 credits    │   RM 4.50           │
+│   Tier 3        │   501 - 1000    │   40 credits    │   RM 4.00           │
+│   Tier 4        │   1001+         │   35 credits    │   RM 3.50           │
+└─────────────────┴─────────────────┴─────────────────┴─────────────────────┘
 ```
 
 ### Billing Calculation Flow
@@ -194,28 +207,30 @@ Each client can have volume-based pricing tiers:
 
 ### Credit Ledger
 
-All credit transactions are recorded in the `credit_ledger` table:
+All credit transactions are recorded in the `credit_ledger` table. Amounts are stored as **integer credits**:
 
-| Type | Description | Amount |
-|------|-------------|--------|
-| `topup` | Admin adds credits | +100.00 |
-| `included` | Initial/promotional credits | +10.00 |
-| `usage` | KYC session billed | -5.00 |
-| `refund` | Credit refund | +5.00 |
-| `adjustment` | Manual adjustment | ±X.XX |
+| Type | Description | Amount (credits) | MYR Equivalent |
+|------|-------------|------------------|----------------|
+| `topup` | Admin adds credits | +1,000 | RM 100 |
+| `included` | Initial/promotional credits | +100 | RM 10 |
+| `usage` | KYC session billed | -50 | RM 5 |
+| `refund` | Credit refund | +50 | RM 5 |
+| `adjustment` | Manual adjustment | ±X | ±X/10 |
 
 Example ledger:
 ```
-┌────────────┬──────────┬─────────────────────────────────────────┬─────────┬─────────┐
-│    Date    │   Type   │              Description                │ Amount  │ Balance │
-├────────────┼──────────┼─────────────────────────────────────────┼─────────┼─────────┤
-│ 2026-01-15 │ included │ Initial demo credits                    │ +10.00  │ 10.00   │
-│ 2026-01-20 │ topup    │ Credit top-up                           │ +100.00 │ 110.00  │
-│ 2026-01-21 │ usage    │ KYC session approved (Tier 1: 5 credits)│ -5.00   │ 105.00  │
-│ 2026-01-21 │ usage    │ KYC session rejected (Tier 1: 5 credits)│ -5.00   │ 100.00  │
-│ 2026-01-22 │ usage    │ KYC session approved (Tier 1: 5 credits)│ -5.00   │ 95.00   │
-└────────────┴──────────┴─────────────────────────────────────────┴─────────┴─────────┘
+┌────────────┬──────────┬──────────────────────────────────────────────┬─────────┬─────────┐
+│    Date    │   Type   │              Description                     │ Amount  │ Balance │
+├────────────┼──────────┼──────────────────────────────────────────────┼─────────┼─────────┤
+│ 2026-01-15 │ included │ Initial demo credits                         │ +100    │ 100     │
+│ 2026-01-20 │ topup    │ Credit top-up (RM 100)                       │ +1000   │ 1100    │
+│ 2026-01-21 │ usage    │ KYC session approved (Tier 1: 50 credits)    │ -50     │ 1050    │
+│ 2026-01-21 │ usage    │ KYC session rejected (Tier 1: 50 credits)    │ -50     │ 1000    │
+│ 2026-01-22 │ usage    │ KYC session approved (Tier 1: 50 credits)    │ -50     │ 950     │
+└────────────┴──────────┴──────────────────────────────────────────────┴─────────┴─────────┘
 ```
+
+**Note:** Balance of 950 credits = RM 95.00
 
 ---
 

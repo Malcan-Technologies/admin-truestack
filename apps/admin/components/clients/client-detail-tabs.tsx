@@ -76,7 +76,7 @@ type PricingTier = {
   tier_name: string;
   min_volume: number;
   max_volume: number | null;
-  price_per_unit: string;
+  credits_per_session: number; // 10 credits = RM 1
 };
 
 interface ClientDetailTabsProps {
@@ -134,6 +134,9 @@ export function ClientDetailTabs({ client }: ClientDetailTabsProps) {
     setApiKeys(updatedKeys);
   };
 
+  // Credit system: 10 credits = RM 1
+  const CREDITS_PER_MYR = 10;
+
   const addPricingTier = () => {
     const lastTier = pricingTiers[pricingTiers.length - 1];
     const newMinVolume = lastTier ? (lastTier.max_volume || lastTier.min_volume) + 1 : 0;
@@ -143,7 +146,7 @@ export function ClientDetailTabs({ client }: ClientDetailTabsProps) {
         tier_name: `Tier ${pricingTiers.length + 1}`,
         min_volume: newMinVolume,
         max_volume: null,
-        price_per_unit: "5.00",
+        credits_per_session: 50, // Default: 50 credits = RM 5
       },
     ]);
   };
@@ -165,7 +168,7 @@ export function ClientDetailTabs({ client }: ClientDetailTabsProps) {
         tierName: tier.tier_name,
         minVolume: tier.min_volume,
         maxVolume: tier.max_volume,
-        pricePerUnit: parseFloat(tier.price_per_unit),
+        creditsPerSession: tier.credits_per_session,
       }));
 
       await apiClient(`/api/admin/clients/${client.id}/pricing`, {
@@ -303,10 +306,18 @@ export function ClientDetailTabs({ client }: ClientDetailTabsProps) {
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex items-center justify-between">
-                <span className="text-slate-400">Credit Balance</span>
-                <span className="text-2xl font-semibold text-white">
-                  {creditBalance.toLocaleString()}
-                </span>
+                <div>
+                  <span className="text-slate-400">Credit Balance</span>
+                  <p className="text-xs text-slate-500">10 credits = RM 1</p>
+                </div>
+                <div className="text-right">
+                  <span className="text-2xl font-semibold text-white">
+                    {creditBalance.toLocaleString()}
+                  </span>
+                  <p className="text-sm text-slate-400">
+                    (RM {(creditBalance / 10).toFixed(2)})
+                  </p>
+                </div>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-slate-400">Total Sessions</span>
@@ -520,10 +531,18 @@ export function ClientDetailTabs({ client }: ClientDetailTabsProps) {
           <CardContent>
             <div className="mb-6 rounded-lg border border-slate-700 bg-slate-800/50 p-4">
               <div className="flex items-center justify-between">
-                <span className="text-sm text-slate-400">Current Balance</span>
-                <span className="text-2xl font-semibold text-white">
-                  {creditBalance.toLocaleString()}
-                </span>
+                <div>
+                  <span className="text-sm text-slate-400">Current Balance</span>
+                  <p className="text-xs text-slate-500 mt-1">10 credits = RM 1</p>
+                </div>
+                <div className="text-right">
+                  <span className="text-2xl font-semibold text-white">
+                    {creditBalance.toLocaleString()} credits
+                  </span>
+                  <p className="text-sm text-slate-400">
+                    (RM {(creditBalance / 10).toFixed(2)})
+                  </p>
+                </div>
               </div>
             </div>
 
@@ -540,8 +559,8 @@ export function ClientDetailTabs({ client }: ClientDetailTabsProps) {
                     <TableHead className="text-slate-400">Date</TableHead>
                     <TableHead className="text-slate-400">Type</TableHead>
                     <TableHead className="text-slate-400">Description</TableHead>
-                    <TableHead className="text-right text-slate-400">Amount</TableHead>
-                    <TableHead className="text-right text-slate-400">Balance</TableHead>
+                    <TableHead className="text-right text-slate-400">Amount (Credits)</TableHead>
+                    <TableHead className="text-right text-slate-400">Balance (Credits)</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -571,16 +590,24 @@ export function ClientDetailTabs({ client }: ClientDetailTabsProps) {
                       <TableCell className="text-slate-300">
                         {entry.description || "-"}
                       </TableCell>
-                      <TableCell
-                        className={`text-right font-medium ${
-                          entry.amount >= 0 ? "text-green-400" : "text-red-400"
-                        }`}
-                      >
-                        {entry.amount >= 0 ? "+" : ""}
-                        {entry.amount.toLocaleString()}
+                      <TableCell className="text-right">
+                        <div>
+                          <span className={`font-medium ${entry.amount >= 0 ? "text-green-400" : "text-red-400"}`}>
+                            {entry.amount >= 0 ? "+" : ""}
+                            {entry.amount.toLocaleString()}
+                          </span>
+                          <p className="text-xs text-slate-500">
+                            (RM {Math.abs(entry.amount / 10).toFixed(2)})
+                          </p>
+                        </div>
                       </TableCell>
-                      <TableCell className="text-right text-slate-300">
-                        {entry.balance_after.toLocaleString()}
+                      <TableCell className="text-right">
+                        <div>
+                          <span className="text-slate-300">{entry.balance_after.toLocaleString()}</span>
+                          <p className="text-xs text-slate-500">
+                            (RM {(entry.balance_after / 10).toFixed(2)})
+                          </p>
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -687,7 +714,8 @@ export function ClientDetailTabs({ client }: ClientDetailTabsProps) {
                       <TableHead className="text-slate-400">Tier Name</TableHead>
                       <TableHead className="text-slate-400">Min Volume</TableHead>
                       <TableHead className="text-slate-400">Max Volume</TableHead>
-                      <TableHead className="text-slate-400">Price per KYC (MYR)</TableHead>
+                      <TableHead className="text-slate-400">Credits per KYC</TableHead>
+                      <TableHead className="text-slate-400">MYR Equivalent</TableHead>
                       <TableHead className="text-right text-slate-400">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -723,12 +751,14 @@ export function ClientDetailTabs({ client }: ClientDetailTabsProps) {
                         <TableCell>
                           <Input
                             type="number"
-                            step="0.01"
-                            min={0}
-                            value={tier.price_per_unit}
-                            onChange={(e) => updatePricingTier(index, "price_per_unit", e.target.value)}
+                            min={1}
+                            value={tier.credits_per_session}
+                            onChange={(e) => updatePricingTier(index, "credits_per_session", parseInt(e.target.value) || 1)}
                             className="h-8 w-24 border-slate-700 bg-slate-800 text-white"
                           />
+                        </TableCell>
+                        <TableCell className="text-slate-400 text-sm">
+                          RM {(tier.credits_per_session / CREDITS_PER_MYR).toFixed(2)}
                         </TableCell>
                         <TableCell className="text-right">
                           <Button
@@ -746,11 +776,15 @@ export function ClientDetailTabs({ client }: ClientDetailTabsProps) {
                 </Table>
 
                 <div className="rounded-lg border border-slate-700 bg-slate-800/30 p-4">
+                  <h4 className="text-sm font-medium text-white mb-2">Credit System</h4>
+                  <p className="text-xs text-slate-400 mb-2">
+                    <strong>10 credits = RM 1</strong> (each credit = RM 0.10)
+                  </p>
                   <h4 className="text-sm font-medium text-white mb-2">Example Pricing Calculation</h4>
                   <p className="text-xs text-slate-400">
-                    If a client uses 150 KYC sessions in a month with tiers: 0-100 @ RM5, 101-500 @ RM4.50
+                    If a client uses 150 KYC sessions in a month with tiers: 0-100 @ 50 credits, 101-500 @ 45 credits
                     <br />
-                    Total: (100 × RM5) + (50 × RM4.50) = RM500 + RM225 = RM725
+                    Total: (100 × 50) + (50 × 45) = 5,000 + 2,250 = 7,250 credits (RM 725)
                   </p>
                 </div>
               </div>

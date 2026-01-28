@@ -83,7 +83,7 @@ type PricingTier = {
   tierName: string;
   minVolume: number;
   maxVolume: number | null;
-  pricePerUnit: string;
+  creditsPerSession: number; // 10 credits = RM 1
 };
 
 type PricingConfig = {
@@ -122,10 +122,10 @@ export function NewClientModal({ trigger }: NewClientModalProps) {
     environment: "live",
   });
 
-  // Step 3: Pricing configuration
+  // Step 3: Pricing configuration (10 credits = RM 1)
   const [pricingConfig, setPricingConfig] = useState<PricingConfig>({
     allowOverdraft: true,
-    tiers: [{ tierName: "Standard", minVolume: 0, maxVolume: null, pricePerUnit: "5.00" }],
+    tiers: [{ tierName: "Standard", minVolume: 0, maxVolume: null, creditsPerSession: 50 }], // 50 credits = RM 5
   });
 
   // Step 4: Credits configuration
@@ -146,7 +146,7 @@ export function NewClientModal({ trigger }: NewClientModalProps) {
     setApiKeyConfig({ generate: true, environment: "live" });
     setPricingConfig({
       allowOverdraft: true,
-      tiers: [{ tierName: "Standard", minVolume: 0, maxVolume: null, pricePerUnit: "5.00" }],
+      tiers: [{ tierName: "Standard", minVolume: 0, maxVolume: null, creditsPerSession: 50 }],
     });
     setCreditsConfig({ amount: "", type: "included" });
     setCurrentStep(0);
@@ -244,7 +244,7 @@ export function NewClientModal({ trigger }: NewClientModalProps) {
             tierName: tier.tierName,
             minVolume: tier.minVolume,
             maxVolume: tier.maxVolume,
-            pricePerUnit: parseFloat(tier.pricePerUnit),
+            creditsPerSession: tier.creditsPerSession,
           })),
         }),
       });
@@ -638,7 +638,7 @@ function PricingStep({
           tierName: `Tier ${config.tiers.length + 1}`,
           minVolume: newMinVolume,
           maxVolume: null,
-          pricePerUnit: lastTier ? (parseFloat(lastTier.pricePerUnit) * 0.9).toFixed(2) : "5.00",
+          creditsPerSession: lastTier ? Math.round(lastTier.creditsPerSession * 0.9) : 50,
         },
       ],
     });
@@ -738,7 +738,8 @@ function PricingStep({
                   <TableHead className="text-slate-400">Tier Name</TableHead>
                   <TableHead className="text-slate-400">Min Volume</TableHead>
                   <TableHead className="text-slate-400">Max Volume</TableHead>
-                  <TableHead className="text-slate-400">Price per KYC (MYR)</TableHead>
+                  <TableHead className="text-slate-400">Credits per KYC</TableHead>
+                  <TableHead className="text-slate-400">MYR Equivalent</TableHead>
                   <TableHead className="text-right text-slate-400 w-16">Actions</TableHead>
                 </TableRow>
               </TableHeader>
@@ -774,12 +775,14 @@ function PricingStep({
                     <TableCell>
                       <Input
                         type="number"
-                        step="0.01"
-                        min={0}
-                        value={tier.pricePerUnit}
-                        onChange={(e) => updateTier(index, "pricePerUnit", e.target.value)}
+                        min={1}
+                        value={tier.creditsPerSession}
+                        onChange={(e) => updateTier(index, "creditsPerSession", parseInt(e.target.value) || 1)}
                         className="h-8 w-24 border-slate-700 bg-slate-800 text-white"
                       />
+                    </TableCell>
+                    <TableCell className="text-slate-400 text-sm">
+                      RM {(tier.creditsPerSession / 10).toFixed(2)}
                     </TableCell>
                     <TableCell className="text-right">
                       <Button
@@ -1002,7 +1005,7 @@ function ReviewStep({
               <div className="mt-2 text-xs text-slate-500">
                 {pricingConfig.tiers.map((tier, i) => (
                   <div key={i}>
-                    {tier.tierName}: {tier.minVolume}-{tier.maxVolume ?? "∞"} @ RM{tier.pricePerUnit}
+                    {tier.tierName}: {tier.minVolume}-{tier.maxVolume ?? "∞"} @ {tier.creditsPerSession} credits (RM {(tier.creditsPerSession / 10).toFixed(2)})
                   </div>
                 ))}
               </div>

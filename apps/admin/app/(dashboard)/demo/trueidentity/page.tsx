@@ -40,6 +40,8 @@ import {
   User,
   DollarSign,
   Settings,
+  CloudDownload,
+  Activity,
 } from "lucide-react";
 import Link from "next/link";
 import { toast } from "sonner";
@@ -78,7 +80,7 @@ type DemoSetupData = {
     tier_name: string;
     min_volume: number;
     max_volume: number | null;
-    price_per_unit: string;
+    credits_per_session: number; // 10 credits = RM 1
   }[];
   recentSessions: {
     id: string;
@@ -159,6 +161,54 @@ export default function TrueIdentityDemoPage() {
   // Credit top-up state
   const [topupAmount, setTopupAmount] = useState("10");
   const [toppingUp, setToppingUp] = useState(false);
+
+  // Innovatif refresh state - matches the clean API response format
+  const [refreshingFromInnovatif, setRefreshingFromInnovatif] = useState(false);
+  const [innovatifStatus, setInnovatifStatus] = useState<{
+    // Session identification
+    id: string;
+    ref_id?: string;
+    
+    // Status
+    status: string;
+    result: string | null;
+    reject_message?: string | null;
+    refreshed: boolean;
+    error?: string;
+    message?: string;
+    
+    // Document data extracted from OCR
+    document?: {
+      full_name?: string;
+      id_number?: string;
+      id_number_back?: string;
+      address?: string;
+      gender?: string;
+    } | null;
+    
+    // Verification results
+    verification?: {
+      document_valid?: boolean;
+      name_match?: boolean;
+      id_match?: boolean;
+      front_back_match?: boolean;
+      landmark_valid?: boolean;
+      face_match?: boolean;
+      face_match_score?: number | null;
+      liveness_passed?: boolean;
+    };
+    
+    // Document images (S3 URLs)
+    images?: {
+      front_document?: string | null;
+      back_document?: string | null;
+      face_image?: string | null;
+      best_frame?: string | null;
+    };
+    
+    // Raw provider data
+    _raw?: Record<string, unknown>;
+  } | null>(null);
 
   // Load persisted session from localStorage on mount
   useEffect(() => {
@@ -332,6 +382,7 @@ export default function TrueIdentityDemoPage() {
   const clearSession = useCallback(() => {
     setCurrentSession(null);
     setWebhookData(null);
+    setInnovatifStatus(null);
     localStorage.removeItem(STORAGE_KEY);
     toast.success("Session cleared - ready for new session");
   }, []);
@@ -340,12 +391,62 @@ export default function TrueIdentityDemoPage() {
   const startNewSession = useCallback(() => {
     setCurrentSession(null);
     setWebhookData(null);
+    setInnovatifStatus(null);
     localStorage.removeItem(STORAGE_KEY);
     // Generate new random document number for testing
     const randomSuffix = Math.floor(Math.random() * 10000).toString().padStart(4, "0");
     setDocumentNumber(`90010114${randomSuffix}`);
     toast.success("Ready for new session");
   }, []);
+
+  // Refresh status directly from Innovatif API (simulating what a client would do)
+  const refreshFromInnovatif = useCallback(async () => {
+    if (!currentSession?.id || !demoData?.apiKey?.key) {
+      toast.error("No active session or API key");
+      return;
+    }
+
+    setRefreshingFromInnovatif(true);
+    try {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+      
+      // Call POST /v1/kyc/sessions/:id to refresh from Innovatif
+      const response = await fetch(`${apiUrl}/api/v1/kyc/sessions/${currentSession.id}`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${demoData.apiKey.key}`,
+        },
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || `HTTP ${response.status}`);
+      }
+
+      const result = await response.json();
+      setInnovatifStatus(result);
+      
+      // Update current session status if it changed
+      if (result.status && result.status !== currentSession.status) {
+        setCurrentSession((prev) => prev ? { ...prev, status: result.status } : prev);
+      }
+
+      if (result.refreshed) {
+        toast.success(`Status refreshed from Innovatif: ${result.status}`);
+        // Also refresh our local webhook data
+        await pollSessionStatus();
+      } else if (result.error) {
+        toast.error(result.error);
+      } else {
+        toast.info(result.message || "Session already finalized");
+      }
+    } catch (error) {
+      console.error("Failed to refresh from Innovatif:", error);
+      toast.error(error instanceof Error ? error.message : "Failed to refresh from Innovatif");
+    } finally {
+      setRefreshingFromInnovatif(false);
+    }
+  }, [currentSession?.id, currentSession?.status, demoData?.apiKey?.key, pollSessionStatus]);
 
   useEffect(() => {
     if (currentSession?.id) {
@@ -542,6 +643,7 @@ export default function TrueIdentityDemoPage() {
             <div className="text-center">
               <span className="text-4xl font-bold text-white">{demoData?.creditBalance || 0}</span>
               <p className="text-sm text-slate-400">credits remaining</p>
+              <p className="text-xs text-slate-500">(RM {((demoData?.creditBalance || 0) / 10).toFixed(2)})</p>
             </div>
             <div className="flex gap-2">
               <Input
@@ -620,7 +722,7 @@ export default function TrueIdentityDemoPage() {
                       </span>
                     </div>
                     <span className="font-mono text-sm text-green-400">
-                      RM {parseFloat(tier.price_per_unit).toFixed(2)}
+                      {tier.credits_per_session} credits (RM {(tier.credits_per_session / 10).toFixed(2)})
                     </span>
                   </div>
                 ))}
@@ -836,13 +938,13 @@ export default function TrueIdentityDemoPage() {
                     </p>
 
                     {/* Local development note */}
-                    <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 mt-4">
+                    {/* <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 mt-4">
                       <p className="text-xs text-amber-400">
                         <strong>Note:</strong> Webhooks from Innovatif cannot reach localhost. 
                         Session status updates will only work in production. 
                         The redirect page shows the final status from query parameters.
                       </p>
-                    </div>
+                    </div> */}
                   </div>
                 ) : (
                   <div className="flex flex-col items-center justify-center py-12 text-center">
@@ -885,12 +987,22 @@ export default function TrueIdentityDemoPage() {
                     <Button
                       variant="outline"
                       size="sm"
+                      onClick={refreshFromInnovatif}
+                      disabled={refreshingFromInnovatif}
+                      className="border-indigo-500/50 bg-indigo-500/10 text-indigo-300 hover:bg-indigo-500/20 hover:text-indigo-200"
+                    >
+                      <CloudDownload className={`mr-2 h-4 w-4 ${refreshingFromInnovatif ? "animate-pulse" : ""}`} />
+                      {refreshingFromInnovatif ? "Fetching..." : "Fetch from Innovatif"}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
                       onClick={manualRefresh}
                       disabled={pollingSession}
                       className="border-slate-700 bg-transparent text-slate-300 hover:bg-slate-800 hover:text-white"
                     >
                       <RefreshCw className={`mr-2 h-4 w-4 ${pollingSession ? "animate-spin" : ""}`} />
-                      Refresh
+                      Refresh DB
                     </Button>
                     <Button
                       variant="ghost"
@@ -926,6 +1038,159 @@ export default function TrueIdentityDemoPage() {
                     </div>
                     {getStatusBadge(webhookData.session.status, webhookData.session.result)}
                   </div>
+
+                  {/* TrueStack API Response (what clients receive) */}
+                  {innovatifStatus && (
+                    <div className="space-y-4">
+                      {/* Document Data */}
+                      {innovatifStatus.document && (
+                        <div className="rounded-lg border border-green-500/30 bg-green-500/5 p-4">
+                          <h4 className="text-sm font-medium text-green-300 mb-3 flex items-center gap-2">
+                            <FileCheck className="h-4 w-4" />
+                            Document Data
+                          </h4>
+                          <div className="grid gap-4 md:grid-cols-2 text-sm">
+                            <div className="flex justify-between">
+                              <span className="text-slate-400">full_name</span>
+                              <span className="text-white">{innovatifStatus.document.full_name || "-"}</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-slate-400">id_number</span>
+                              <span className="text-white font-mono">{innovatifStatus.document.id_number || "-"}</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-slate-400">gender</span>
+                              <span className="text-white">{innovatifStatus.document.gender || "-"}</span>
+                            </div>
+                            <div className="flex justify-between col-span-2">
+                              <span className="text-slate-400">address</span>
+                              <span className="text-white text-xs text-right max-w-[350px]">{innovatifStatus.document.address || "-"}</span>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Verification Results */}
+                      {innovatifStatus.verification && (
+                        <div className="rounded-lg border border-blue-500/30 bg-blue-500/5 p-4">
+                          <h4 className="text-sm font-medium text-blue-300 mb-3 flex items-center gap-2">
+                            <CheckCircle className="h-4 w-4" />
+                            Verification Results
+                          </h4>
+                          <div className="grid gap-3 md:grid-cols-3 text-sm">
+                            <div className="flex justify-between">
+                              <span className="text-slate-400">document_valid</span>
+                              <span className={innovatifStatus.verification.document_valid ? "text-green-400" : "text-red-400"}>
+                                {innovatifStatus.verification.document_valid ? "true" : "false"}
+                              </span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-slate-400">name_match</span>
+                              <span className={innovatifStatus.verification.name_match ? "text-green-400" : "text-red-400"}>
+                                {innovatifStatus.verification.name_match ? "true" : "false"}
+                              </span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-slate-400">id_match</span>
+                              <span className={innovatifStatus.verification.id_match ? "text-green-400" : "text-red-400"}>
+                                {innovatifStatus.verification.id_match ? "true" : "false"}
+                              </span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-slate-400">front_back_match</span>
+                              <span className={innovatifStatus.verification.front_back_match ? "text-green-400" : "text-red-400"}>
+                                {innovatifStatus.verification.front_back_match ? "true" : "false"}
+                              </span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-slate-400">landmark_valid</span>
+                              <span className={innovatifStatus.verification.landmark_valid ? "text-green-400" : "text-red-400"}>
+                                {innovatifStatus.verification.landmark_valid ? "true" : "false"}
+                              </span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-slate-400">face_match</span>
+                              <span className={innovatifStatus.verification.face_match ? "text-green-400" : "text-red-400"}>
+                                {innovatifStatus.verification.face_match ? "true" : "false"}
+                              </span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-slate-400">face_match_score</span>
+                              <span className="text-white font-mono">{innovatifStatus.verification.face_match_score ?? "-"}%</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-slate-400">liveness_passed</span>
+                              <span className={innovatifStatus.verification.liveness_passed ? "text-green-400" : "text-red-400"}>
+                                {innovatifStatus.verification.liveness_passed ? "true" : "false"}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Document Images (S3 URLs) */}
+                      {innovatifStatus.images && (
+                        <div className="rounded-lg border border-purple-500/30 bg-purple-500/5 p-4">
+                          <h4 className="text-sm font-medium text-purple-300 mb-3 flex items-center gap-2">
+                            <Eye className="h-4 w-4" />
+                            Document Images
+                          </h4>
+                          <div className="grid gap-4 md:grid-cols-2 text-sm">
+                            <div className="space-y-1">
+                              <span className="text-slate-400">front_document</span>
+                              {innovatifStatus.images.front_document ? (
+                                <a href={innovatifStatus.images.front_document} target="_blank" rel="noopener noreferrer"
+                                  className="block text-xs text-blue-400 hover:text-blue-300 truncate">
+                                  {innovatifStatus.images.front_document}
+                                </a>
+                              ) : <span className="text-slate-500">null</span>}
+                            </div>
+                            <div className="space-y-1">
+                              <span className="text-slate-400">back_document</span>
+                              {innovatifStatus.images.back_document ? (
+                                <a href={innovatifStatus.images.back_document} target="_blank" rel="noopener noreferrer"
+                                  className="block text-xs text-blue-400 hover:text-blue-300 truncate">
+                                  {innovatifStatus.images.back_document}
+                                </a>
+                              ) : <span className="text-slate-500">null</span>}
+                            </div>
+                            <div className="space-y-1">
+                              <span className="text-slate-400">face_image</span>
+                              {innovatifStatus.images.face_image ? (
+                                <a href={innovatifStatus.images.face_image} target="_blank" rel="noopener noreferrer"
+                                  className="block text-xs text-blue-400 hover:text-blue-300 truncate">
+                                  {innovatifStatus.images.face_image}
+                                </a>
+                              ) : <span className="text-slate-500">null</span>}
+                            </div>
+                            <div className="space-y-1">
+                              <span className="text-slate-400">best_frame</span>
+                              {innovatifStatus.images.best_frame ? (
+                                <a href={innovatifStatus.images.best_frame} target="_blank" rel="noopener noreferrer"
+                                  className="block text-xs text-blue-400 hover:text-blue-300 truncate">
+                                  {innovatifStatus.images.best_frame}
+                                </a>
+                              ) : <span className="text-slate-500">null</span>}
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Full JSON Response */}
+                      <div className="rounded-lg border border-indigo-500/30 bg-indigo-500/5 p-4">
+                        <h4 className="text-sm font-medium text-indigo-300 mb-3 flex items-center gap-2">
+                          <Activity className="h-4 w-4" />
+                          Full API Response (JSON)
+                        </h4>
+                        <p className="text-xs text-slate-400 mb-3">
+                          Complete response from POST /v1/kyc/sessions/:id
+                        </p>
+                        <pre className="text-xs text-slate-300 overflow-auto max-h-64 p-3 rounded bg-slate-900 border border-slate-700">
+                          {JSON.stringify(innovatifStatus, null, 2)}
+                        </pre>
+                      </div>
+                    </div>
+                  )}
 
                   {/* Details Grid */}
                   <div className="grid gap-4 md:grid-cols-2">
@@ -975,10 +1240,190 @@ export default function TrueIdentityDemoPage() {
                   )}
                 </div>
               ) : currentSession ? (
-                <div className="flex flex-col items-center justify-center py-12">
-                  <RefreshCw className="h-8 w-8 text-slate-600 animate-spin mb-4" />
-                  <p className="text-slate-400">Waiting for KYC completion...</p>
-                  <p className="text-sm text-slate-500">Complete the verification in the KYC window</p>
+                <div className="space-y-6">
+                  {/* Pending status message */}
+                  <div className="flex flex-col items-center justify-center py-8 border border-slate-700 rounded-lg bg-slate-800/30">
+                    <RefreshCw className="h-8 w-8 text-slate-600 animate-spin mb-4" />
+                    <p className="text-slate-400">Waiting for KYC completion...</p>
+                    <p className="text-sm text-slate-500 mb-4">Complete the verification in the KYC window</p>
+                    <p className="text-xs text-slate-500">
+                      Click &quot;Fetch from Innovatif&quot; to check current status if webhook is delayed
+                    </p>
+                  </div>
+
+                  {/* Show Innovatif status if fetched manually */}
+                  {innovatifStatus && (
+                    <div className="space-y-4">
+                      {/* Status from Innovatif */}
+                      <div className="flex items-center gap-4 p-4 rounded-lg border border-slate-700 bg-slate-800/50">
+                        {innovatifStatus.status === "completed" ? (
+                          innovatifStatus.result === "approved" ? (
+                            <CheckCircle className="h-8 w-8 text-green-500" />
+                          ) : (
+                            <XCircle className="h-8 w-8 text-red-500" />
+                          )
+                        ) : (
+                          <Clock className="h-8 w-8 text-amber-500" />
+                        )}
+                        <div>
+                          <h3 className="text-lg font-semibold text-white">
+                            {innovatifStatus.status === "completed"
+                              ? innovatifStatus.result === "approved"
+                                ? "Verification Approved"
+                                : "Verification Rejected"
+                              : innovatifStatus.status === "pending"
+                              ? "Waiting for User"
+                              : "Processing"}
+                          </h3>
+                          {innovatifStatus.reject_message && (
+                            <p className="text-sm text-red-400">{innovatifStatus.reject_message}</p>
+                          )}
+                        </div>
+                        <Badge variant="outline" className={
+                          innovatifStatus.status === "completed"
+                            ? innovatifStatus.result === "approved"
+                              ? "border-green-500 text-green-500"
+                              : "border-red-500 text-red-500"
+                            : "border-amber-500 text-amber-500"
+                        }>
+                          {innovatifStatus.status}
+                        </Badge>
+                      </div>
+
+                      {/* Document Data */}
+                      {innovatifStatus.document && (
+                        <div className="rounded-lg border border-green-500/30 bg-green-500/5 p-4">
+                          <h4 className="text-sm font-medium text-green-300 mb-3 flex items-center gap-2">
+                            <FileCheck className="h-4 w-4" />
+                            Document Data
+                          </h4>
+                          <div className="grid gap-4 md:grid-cols-2 text-sm">
+                            <div className="flex justify-between">
+                              <span className="text-slate-400">full_name</span>
+                              <span className="text-white">{innovatifStatus.document.full_name || "-"}</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-slate-400">id_number</span>
+                              <span className="text-white font-mono">{innovatifStatus.document.id_number || "-"}</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-slate-400">gender</span>
+                              <span className="text-white">{innovatifStatus.document.gender || "-"}</span>
+                            </div>
+                            <div className="flex justify-between col-span-2">
+                              <span className="text-slate-400">address</span>
+                              <span className="text-white text-xs text-right max-w-[350px]">{innovatifStatus.document.address || "-"}</span>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Verification Results */}
+                      {innovatifStatus.verification && (
+                        <div className="rounded-lg border border-blue-500/30 bg-blue-500/5 p-4">
+                          <h4 className="text-sm font-medium text-blue-300 mb-3 flex items-center gap-2">
+                            <CheckCircle className="h-4 w-4" />
+                            Verification Results
+                          </h4>
+                          <div className="grid gap-3 md:grid-cols-3 text-sm">
+                            <div className="flex justify-between">
+                              <span className="text-slate-400">document_valid</span>
+                              <span className={innovatifStatus.verification.document_valid ? "text-green-400" : "text-red-400"}>
+                                {innovatifStatus.verification.document_valid ? "true" : "false"}
+                              </span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-slate-400">name_match</span>
+                              <span className={innovatifStatus.verification.name_match ? "text-green-400" : "text-red-400"}>
+                                {innovatifStatus.verification.name_match ? "true" : "false"}
+                              </span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-slate-400">id_match</span>
+                              <span className={innovatifStatus.verification.id_match ? "text-green-400" : "text-red-400"}>
+                                {innovatifStatus.verification.id_match ? "true" : "false"}
+                              </span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-slate-400">face_match</span>
+                              <span className={innovatifStatus.verification.face_match ? "text-green-400" : "text-red-400"}>
+                                {innovatifStatus.verification.face_match ? "true" : "false"}
+                              </span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-slate-400">face_match_score</span>
+                              <span className="text-white font-mono">{innovatifStatus.verification.face_match_score ?? "-"}%</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-slate-400">liveness_passed</span>
+                              <span className={innovatifStatus.verification.liveness_passed ? "text-green-400" : "text-red-400"}>
+                                {innovatifStatus.verification.liveness_passed ? "true" : "false"}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Document Images (S3 URLs) */}
+                      {innovatifStatus.images && (
+                        <div className="rounded-lg border border-purple-500/30 bg-purple-500/5 p-4">
+                          <h4 className="text-sm font-medium text-purple-300 mb-3 flex items-center gap-2">
+                            <Eye className="h-4 w-4" />
+                            Document Images
+                          </h4>
+                          <div className="grid gap-4 md:grid-cols-2 text-sm">
+                            <div className="space-y-1">
+                              <span className="text-slate-400">front_document</span>
+                              {innovatifStatus.images.front_document ? (
+                                <a href={innovatifStatus.images.front_document} target="_blank" rel="noopener noreferrer"
+                                  className="block text-xs text-blue-400 hover:text-blue-300 truncate">
+                                  {innovatifStatus.images.front_document}
+                                </a>
+                              ) : <span className="text-slate-500">null</span>}
+                            </div>
+                            <div className="space-y-1">
+                              <span className="text-slate-400">back_document</span>
+                              {innovatifStatus.images.back_document ? (
+                                <a href={innovatifStatus.images.back_document} target="_blank" rel="noopener noreferrer"
+                                  className="block text-xs text-blue-400 hover:text-blue-300 truncate">
+                                  {innovatifStatus.images.back_document}
+                                </a>
+                              ) : <span className="text-slate-500">null</span>}
+                            </div>
+                            <div className="space-y-1">
+                              <span className="text-slate-400">face_image</span>
+                              {innovatifStatus.images.face_image ? (
+                                <a href={innovatifStatus.images.face_image} target="_blank" rel="noopener noreferrer"
+                                  className="block text-xs text-blue-400 hover:text-blue-300 truncate">
+                                  {innovatifStatus.images.face_image}
+                                </a>
+                              ) : <span className="text-slate-500">null</span>}
+                            </div>
+                            <div className="space-y-1">
+                              <span className="text-slate-400">best_frame</span>
+                              {innovatifStatus.images.best_frame ? (
+                                <a href={innovatifStatus.images.best_frame} target="_blank" rel="noopener noreferrer"
+                                  className="block text-xs text-blue-400 hover:text-blue-300 truncate">
+                                  {innovatifStatus.images.best_frame}
+                                </a>
+                              ) : <span className="text-slate-500">null</span>}
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Raw API Response */}
+                      <div className="rounded-lg border border-indigo-500/30 bg-indigo-500/5 p-4">
+                        <h4 className="text-sm font-medium text-indigo-300 mb-3 flex items-center gap-2">
+                          <Activity className="h-4 w-4" />
+                          Client API Response (POST /v1/kyc/sessions/:id)
+                        </h4>
+                        <pre className="text-xs text-slate-300 overflow-auto max-h-48 p-3 rounded bg-slate-900 border border-slate-700">
+                          {JSON.stringify(innovatifStatus, null, 2)}
+                        </pre>
+                      </div>
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div className="flex flex-col items-center justify-center py-12">
@@ -1074,8 +1519,8 @@ export default function TrueIdentityDemoPage() {
                       <TableHead className="text-slate-400">Date & Time</TableHead>
                       <TableHead className="text-slate-400">Type</TableHead>
                       <TableHead className="text-slate-400">Description</TableHead>
-                      <TableHead className="text-right text-slate-400">Amount</TableHead>
-                      <TableHead className="text-right text-slate-400">Balance</TableHead>
+                      <TableHead className="text-right text-slate-400">Amount (Credits)</TableHead>
+                      <TableHead className="text-right text-slate-400">Balance (Credits)</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -1105,16 +1550,24 @@ export default function TrueIdentityDemoPage() {
                         <TableCell className="text-slate-300">
                           {entry.description || "-"}
                         </TableCell>
-                        <TableCell
-                          className={`text-right font-medium ${
-                            entry.amount >= 0 ? "text-green-400" : "text-red-400"
-                          }`}
-                        >
-                          {entry.amount >= 0 ? "+" : ""}
-                          {entry.amount.toLocaleString()}
+                        <TableCell className="text-right">
+                          <div>
+                            <span className={`font-medium ${entry.amount >= 0 ? "text-green-400" : "text-red-400"}`}>
+                              {entry.amount >= 0 ? "+" : ""}
+                              {entry.amount.toLocaleString()}
+                            </span>
+                            <p className="text-xs text-slate-500">
+                              (RM {Math.abs(entry.amount / 10).toFixed(2)})
+                            </p>
+                          </div>
                         </TableCell>
-                        <TableCell className="text-right text-slate-300">
-                          {entry.balance_after.toLocaleString()}
+                        <TableCell className="text-right">
+                          <div>
+                            <span className="text-slate-300">{entry.balance_after.toLocaleString()}</span>
+                            <p className="text-xs text-slate-500">
+                              (RM {(entry.balance_after / 10).toFixed(2)})
+                            </p>
+                          </div>
                         </TableCell>
                       </TableRow>
                     ))}

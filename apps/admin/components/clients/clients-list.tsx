@@ -65,7 +65,7 @@ export function ClientsList({ clients }: ClientsListProps) {
                 <TableHead className="text-slate-400">Name</TableHead>
                 <TableHead className="text-slate-400">Code</TableHead>
                 <TableHead className="text-slate-400">Status</TableHead>
-                <TableHead className="text-slate-400">Credits</TableHead>
+                <TableHead className="text-slate-400">Credits (10 = RM1)</TableHead>
                 <TableHead className="text-slate-400">Sessions</TableHead>
                 <TableHead className="text-slate-400">Created</TableHead>
               </TableRow>
@@ -101,8 +101,15 @@ export function ClientsList({ clients }: ClientsListProps) {
                       {client.status}
                     </Badge>
                   </TableCell>
-                  <TableCell className="text-slate-300">
-                    {Number(client.credit_balance || 0).toLocaleString()}
+                  <TableCell>
+                    <div>
+                      <span className="text-slate-300">
+                        {Number(client.credit_balance || 0).toLocaleString()} <br></br>
+                      </span>
+                      <span className="ml-1 text-xs text-slate-500">
+                        (RM {((client.credit_balance || 0) / 10).toFixed(2)})
+                      </span>
+                    </div>
                   </TableCell>
                   <TableCell className="text-slate-300">
                     {Number(client.sessions_count || 0).toLocaleString()}

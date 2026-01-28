@@ -172,13 +172,209 @@ KYC provider error:
 
 ---
 
+### Get Session Status
+
+Retrieves the current status of a KYC session from TrueStack's database.
+
+```
+GET /v1/kyc/sessions/:id
+```
+
+#### Path Parameters
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `id` | string (UUID) | The session ID returned when creating the session |
+
+#### Example Request
+
+```bash
+curl -X GET https://api.truestack.my/v1/kyc/sessions/550e8400-e29b-41d4-a716-446655440000 \
+  -H "Authorization: Bearer ts_live_abc123..."
+```
+
+#### Success Response
+
+**Status: 200 OK**
+
+```json
+{
+  "id": "550e8400-e29b-41d4-a716-446655440000",
+  "status": "completed",
+  "result": "approved",
+  "document_name": "Ahmad bin Abdullah",
+  "document_number": "901234-56-7890",
+  "document_type": "1",
+  "metadata": {
+    "user_id": "usr_12345"
+  },
+  "created_at": "2026-01-28T10:00:00.000Z",
+  "updated_at": "2026-01-28T10:05:00.000Z",
+  "ocr_result": {
+    "name": "AHMAD BIN ABDULLAH",
+    "id_number": "901234567890",
+    "address": "123 JALAN EXAMPLE, 50000 KUALA LUMPUR"
+  },
+  "documents": {
+    "front_document": "https://api.truestack.my/api/v1/kyc/sessions/.../documents/front_document",
+    "back_document": "https://api.truestack.my/api/v1/kyc/sessions/.../documents/back_document",
+    "face_image": "https://api.truestack.my/api/v1/kyc/sessions/.../documents/face_image",
+    "best_frame": "https://api.truestack.my/api/v1/kyc/sessions/.../documents/best_frame"
+  }
+}
+```
+
+**Note:** `ocr_result` and `documents` are only included when session status is `completed`.
+
+---
+
+### Refresh Session Status
+
+Fetches the latest status directly from the KYC provider (Innovatif) and updates our database. Use this when webhooks are delayed or if you need to verify the current status.
+
+```
+POST /v1/kyc/sessions/:id
+```
+
+#### Path Parameters
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `id` | string (UUID) | The session ID returned when creating the session |
+
+#### Example Request
+
+```bash
+curl -X POST https://api.truestack.my/v1/kyc/sessions/550e8400-e29b-41d4-a716-446655440000 \
+  -H "Authorization: Bearer ts_live_abc123..."
+```
+
+#### Success Response
+
+**Status: 200 OK**
+
+When status was refreshed from provider (includes OCR data, verification results, and S3 image URLs):
+
+```json
+{
+  "id": "550e8400-e29b-41d4-a716-446655440000",
+  "ref_id": "DEMO_CLI_mkxl2qbq_52c0732a",
+  "status": "completed",
+  "result": "approved",
+  "reject_message": null,
+  "refreshed": true,
+  
+  "document": {
+    "full_name": "AHMAD BIN ABDULLAH",
+    "id_number": "901234-56-7890",
+    "id_number_back": "901234-56-7890-04-01",
+    "address": "123 JALAN EXAMPLE, 50000 KUALA LUMPUR",
+    "gender": "LELAKI"
+  },
+  
+  "verification": {
+    "document_valid": true,
+    "name_match": true,
+    "id_match": true,
+    "front_back_match": true,
+    "landmark_valid": true,
+    "face_match": true,
+    "face_match_score": 95,
+    "liveness_passed": true
+  },
+  
+  "images": {
+    "front_document": "https://bucket.s3.ap-southeast-5.amazonaws.com/kyc/.../front_document.jpg?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Expires=3600&X-Amz-Signature=...",
+    "back_document": "https://bucket.s3.ap-southeast-5.amazonaws.com/kyc/.../back_document.jpg?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Expires=3600&X-Amz-Signature=...",
+    "face_image": "https://bucket.s3.ap-southeast-5.amazonaws.com/kyc/.../face_image.jpg?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Expires=3600&X-Amz-Signature=...",
+    "best_frame": "https://bucket.s3.ap-southeast-5.amazonaws.com/kyc/.../best_frame.jpg?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Expires=3600&X-Amz-Signature=..."
+  },
+  
+  "_raw": {
+    "innovatif_status": "2",
+    "step1": { ... },
+    "step2": { ... }
+  }
+}
+```
+
+#### Response Fields
+
+| Field | Description |
+|-------|-------------|
+| `id` | TrueStack session UUID |
+| `ref_id` | Your reference ID for this session |
+| `status` | Session status: `pending`, `processing`, `completed`, `expired` |
+| `result` | Verification result: `approved`, `rejected`, or `null` if pending |
+| `reject_message` | Reason for rejection (if applicable) |
+| `refreshed` | Whether status was updated from provider |
+| **document** | |
+| `document.full_name` | Full name extracted via OCR |
+| `document.id_number` | ID number from front of document |
+| `document.id_number_back` | ID number from back of document |
+| `document.address` | Address extracted from document |
+| `document.gender` | Gender from document |
+| **verification** | |
+| `verification.document_valid` | Document passed all verification checks |
+| `verification.name_match` | Name matches what was provided |
+| `verification.id_match` | ID number matches what was provided |
+| `verification.front_back_match` | Front and back ID numbers match |
+| `verification.landmark_valid` | Document landmarks are valid (anti-fraud) |
+| `verification.face_match` | Face matches the ID photo |
+| `verification.face_match_score` | Face match confidence (0-100) |
+| `verification.liveness_passed` | User passed liveness detection |
+| **images** | Pre-signed S3 URLs (valid for 1 hour) |
+| `images.front_document` | Pre-signed URL to front of ID document |
+| `images.back_document` | Pre-signed URL to back of ID document |
+| `images.face_image` | Pre-signed URL to cropped face from ID |
+| `images.best_frame` | Pre-signed URL to best frame from liveness check |
+| **_raw** | |
+| `_raw` | Raw provider response (for debugging) |
+
+> **Note:** Image URLs are pre-signed and expire after 1 hour. If you need to access images after the URLs have expired, call this endpoint again to receive fresh pre-signed URLs. No additional credit charge will be applied for subsequent status checks on already-billed sessions.
+
+When session is already finalized (no refresh needed):
+
+```json
+{
+  "id": "550e8400-e29b-41d4-a716-446655440000",
+  "status": "completed",
+  "result": "approved",
+  "message": "Session already finalized",
+  "refreshed": false
+}
+```
+
+When provider is unreachable:
+
+```json
+{
+  "id": "550e8400-e29b-41d4-a716-446655440000",
+  "status": "pending",
+  "result": null,
+  "refreshed": false,
+  "error": "Failed to fetch status from provider"
+}
+```
+
+#### Use Cases
+
+- **Webhook not received**: If your webhook endpoint didn't receive a notification, call this to check if the session completed.
+- **Status verification**: Before taking action based on webhook data, verify the status is accurate.
+- **Polling fallback**: If webhooks are blocked by your firewall, poll this endpoint periodically.
+
+**Note:** Avoid calling this endpoint repeatedly in a tight loop. The provider may rate-limit requests. Recommended polling interval: 10-30 seconds.
+
+---
+
 ## Integration Flow
 
 1. **Create Session**: Call `POST /v1/kyc/sessions` with user details
 2. **Redirect User**: Send the end-user to the `onboarding_url` returned
 3. **User Completes KYC**: User takes photos of ID and performs liveness check
 4. **Webhook Notification**: TrueStack sends a webhook to your configured endpoint
-5. **User Redirects**: User is redirected to `success_url` or `fail_url`
+5. **(Optional) Refresh Status**: Call `POST /v1/kyc/sessions/:id` if webhook is delayed
+6. **Get Full Details**: Call `GET /v1/kyc/sessions/:id` to retrieve OCR data and documents
 
 ### Sequence Diagram
 

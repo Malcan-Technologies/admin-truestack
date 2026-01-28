@@ -235,6 +235,7 @@ model KycSession {
   id                   String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   clientId             String    @map("client_id") @db.Uuid
   refId                String    @unique @map("ref_id")
+  innovatifRefId       String?   @map("innovatif_ref_id") // Prefixed ref_id from Innovatif (use for get-status API)
   innovatifOnboardingId String?  @map("innovatif_onboarding_id")
   status               String    @default("pending") // pending, processing, completed, expired
   result               String?   // approved, rejected, null
@@ -299,15 +300,15 @@ model WebhookLog {
 // ============================================
 
 model PricingTier {
-  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  clientId     String   @map("client_id") @db.Uuid
-  productId    String   @map("product_id")
-  tierName     String   @map("tier_name") // e.g., 'Tier 1', 'Tier 2'
-  minVolume    Int      @map("min_volume") // 0, 101, 501, etc.
-  maxVolume    Int?     @map("max_volume") // 100, 500, NULL (unlimited)
-  pricePerUnit Decimal  @map("price_per_unit") @db.Decimal(10, 4) // e.g., 5.0000 MYR
-  createdAt    DateTime @default(now()) @map("created_at")
-  updatedAt    DateTime @default(now()) @updatedAt @map("updated_at")
+  id                String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  clientId          String   @map("client_id") @db.Uuid
+  productId         String   @map("product_id")
+  tierName          String   @map("tier_name") // e.g., 'Tier 1', 'Tier 2'
+  minVolume         Int      @map("min_volume") // 0, 101, 501, etc.
+  maxVolume         Int?     @map("max_volume") // 100, 500, NULL (unlimited)
+  creditsPerSession Int      @map("credits_per_session") // e.g., 50 credits (10 credits = RM 1)
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @default(now()) @updatedAt @map("updated_at")
 
   // Relations
   client  Client  @relation(fields: [clientId], references: [id], onDelete: Cascade)
