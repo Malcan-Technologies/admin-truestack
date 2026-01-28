@@ -17,6 +17,11 @@ COPY packages/shared/prisma/ ./packages/shared/prisma/
 # Install dependencies for shared package
 RUN pnpm install --frozen-lockfile --filter @truestack/shared
 
+# Generate Prisma client (required for seed script)
+WORKDIR /app/packages/shared
+RUN npx prisma generate
+WORKDIR /app
+
 # Copy migration script
 COPY scripts/run-prisma-migrations.sh ./scripts/
 RUN chmod +x ./scripts/run-prisma-migrations.sh
