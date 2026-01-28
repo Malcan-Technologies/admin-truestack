@@ -456,6 +456,8 @@ export function ClientDetailTabs({ client }: ClientDetailTabsProps) {
                           className={
                             entry.type === "topup"
                               ? "border-green-500/30 bg-green-500/10 text-green-400"
+                              : entry.type === "included"
+                              ? "border-indigo-500/30 bg-indigo-500/10 text-indigo-400"
                               : entry.type === "usage"
                               ? "border-blue-500/30 bg-blue-500/10 text-blue-400"
                               : entry.type === "refund"

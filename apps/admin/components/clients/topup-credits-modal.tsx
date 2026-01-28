@@ -45,7 +45,7 @@ export function TopupCreditsModal({
 
   const [formData, setFormData] = useState({
     amount: "",
-    type: "topup" as "topup" | "adjustment" | "refund",
+    type: "topup" as "topup" | "adjustment" | "refund" | "included",
     description: "",
   });
 
@@ -170,6 +170,9 @@ export function TopupCreditsModal({
                 <SelectContent className="border-slate-700 bg-slate-800">
                   <SelectItem value="topup" className="text-white focus:bg-slate-700 focus:text-white">
                     Top Up
+                  </SelectItem>
+                  <SelectItem value="included" className="text-white focus:bg-slate-700 focus:text-white">
+                    Included
                   </SelectItem>
                   <SelectItem value="adjustment" className="text-white focus:bg-slate-700 focus:text-white">
                     Adjustment

@@ -21,11 +21,40 @@ interface NewClientModalProps {
   trigger?: React.ReactNode;
 }
 
+// Generate a client code from company name
+function generateCodeFromName(name: string): string {
+  // Remove common company suffixes and clean up
+  const cleaned = name
+    .replace(/\b(sdn\s*bhd|bhd|plt|llp|inc|corp|corporation|ltd|limited|llc|co|company)\b/gi, "")
+    .trim();
+  
+  // Split into words and take first letters or first word
+  const words = cleaned.split(/\s+/).filter(Boolean);
+  
+  if (words.length === 0) return "";
+  
+  if (words.length === 1) {
+    // Single word: take up to first 10 chars
+    return words[0].toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 10);
+  }
+  
+  // Multiple words: take first letter of each word (up to 10 chars)
+  const acronym = words
+    .map((w) => w[0])
+    .join("")
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, "")
+    .slice(0, 10);
+  
+  return acronym;
+}
+
 export function NewClientModal({ trigger }: NewClientModalProps) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [codeManuallyEdited, setCodeManuallyEdited] = useState(false);
 
   const [formData, setFormData] = useState({
     name: "",
@@ -34,6 +63,7 @@ export function NewClientModal({ trigger }: NewClientModalProps) {
     contactPhone: "",
     companyRegistration: "",
     notes: "",
+    initialCredits: "",
   });
 
   const resetForm = () => {
@@ -44,19 +74,37 @@ export function NewClientModal({ trigger }: NewClientModalProps) {
       contactPhone: "",
       companyRegistration: "",
       notes: "",
+      initialCredits: "",
     });
     setError("");
     setLoading(false);
+    setCodeManuallyEdited(false);
   };
 
   const handleChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
   ) => {
     const { name, value } = e.target;
-    // Auto-uppercase the code field
-    const processedValue =
-      name === "code" ? value.toUpperCase().replace(/[^A-Z0-9_]/g, "") : value;
-    setFormData((prev) => ({ ...prev, [name]: processedValue }));
+    
+    if (name === "code") {
+      // User is manually editing the code
+      setCodeManuallyEdited(true);
+      const processedValue = value.toUpperCase().replace(/[^A-Z0-9_]/g, "");
+      setFormData((prev) => ({ ...prev, code: processedValue }));
+      return;
+    }
+    
+    if (name === "name") {
+      // Auto-generate code from name if not manually edited
+      setFormData((prev) => ({
+        ...prev,
+        name: value,
+        code: codeManuallyEdited ? prev.code : generateCodeFromName(value),
+      }));
+      return;
+    }
+    
+    setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -65,9 +113,15 @@ export function NewClientModal({ trigger }: NewClientModalProps) {
     setLoading(true);
 
     try {
+      const initialCredits = formData.initialCredits
+        ? parseInt(formData.initialCredits)
+        : undefined;
       const client = await apiClient<{ id: string }>("/api/admin/clients", {
         method: "POST",
-        body: JSON.stringify(formData),
+        body: JSON.stringify({
+          ...formData,
+          initialCredits: initialCredits && !isNaN(initialCredits) ? initialCredits : undefined,
+        }),
       });
 
       setOpen(false);
@@ -151,7 +205,7 @@ export function NewClientModal({ trigger }: NewClientModalProps) {
           <div className="grid gap-6 md:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="contactEmail" className="text-slate-200">
-                Contact Email
+                Contact Email <span className="text-red-400">*</span>
               </Label>
               <Input
                 id="contactEmail"
@@ -160,13 +214,14 @@ export function NewClientModal({ trigger }: NewClientModalProps) {
                 placeholder="contact@acme.com"
                 value={formData.contactEmail}
                 onChange={handleChange}
+                required
                 className="border-slate-700 bg-slate-800 text-white placeholder:text-slate-500"
               />
             </div>
 
             <div className="space-y-2">
               <Label htmlFor="contactPhone" className="text-slate-200">
-                Contact Phone
+                Contact Phone <span className="text-red-400">*</span>
               </Label>
               <Input
                 id="contactPhone"
@@ -174,23 +229,46 @@ export function NewClientModal({ trigger }: NewClientModalProps) {
                 placeholder="+60123456789"
                 value={formData.contactPhone}
                 onChange={handleChange}
+                required
                 className="border-slate-700 bg-slate-800 text-white placeholder:text-slate-500"
               />
             </div>
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="companyRegistration" className="text-slate-200">
-              Company Registration (SSM)
-            </Label>
-            <Input
-              id="companyRegistration"
-              name="companyRegistration"
-              placeholder="123456-X"
-              value={formData.companyRegistration}
-              onChange={handleChange}
-              className="border-slate-700 bg-slate-800 text-white placeholder:text-slate-500"
-            />
+          <div className="grid gap-6 md:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="companyRegistration" className="text-slate-200">
+                Company Registration (SSM) <span className="text-red-400">*</span>
+              </Label>
+              <Input
+                id="companyRegistration"
+                name="companyRegistration"
+                placeholder="123456-X"
+                value={formData.companyRegistration}
+                onChange={handleChange}
+                required
+                className="border-slate-700 bg-slate-800 text-white placeholder:text-slate-500"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="initialCredits" className="text-slate-200">
+                Initial Credits (Included)
+              </Label>
+              <Input
+                id="initialCredits"
+                name="initialCredits"
+                type="number"
+                placeholder="0"
+                min="0"
+                value={formData.initialCredits}
+                onChange={handleChange}
+                className="border-slate-700 bg-slate-800 text-white placeholder:text-slate-500"
+              />
+              <p className="text-xs text-slate-500">
+                Credits included with the account (optional).
+              </p>
+            </div>
           </div>
 
           <div className="space-y-2">

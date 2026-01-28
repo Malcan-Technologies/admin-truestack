@@ -35,44 +35,130 @@ env:
   ECS_TASK_MIGRATIONS: trueidentity-prod-migrations
 
 jobs:
-  build:
-    name: Build Docker Images
+  # ============================================
+  # Change Detection - runs first to determine what needs building
+  # ============================================
+  detect-changes:
+    name: Detect Changes
     runs-on: ubuntu-latest
-    environment: production
-    # Skip build for deploy-only and db-* operations
+    # Skip for deploy-only and db-* operations
     if: |
       github.event.inputs.action != 'deploy-only' &&
       github.event.inputs.action != 'db-migrate' &&
       github.event.inputs.action != 'db-seed' &&
       github.event.inputs.action != 'db-migrate-and-seed'
     
-    permissions:
-      id-token: write
-      contents: read
-
     outputs:
-      backend_image: ${{ steps.build-backend.outputs.image }}
-      frontend_image: ${{ steps.build-frontend.outputs.image }}
-      migrations_image: ${{ steps.build-migrations.outputs.image }}
-      has_migration_changes: ${{ steps.check-migrations.outputs.has_changes }}
+      backend_changed: ${{ steps.changes.outputs.backend_changed }}
+      frontend_changed: ${{ steps.changes.outputs.frontend_changed }}
+      migrations_changed: ${{ steps.changes.outputs.migrations_changed }}
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          fetch-depth: 2
+          fetch-depth: 0
 
-      - name: Check for migration changes
-        id: check-migrations
+      - name: Detect changed paths
+        id: changes
         run: |
-          # Check if prisma/ folder has changes compared to previous commit
-          if git diff --name-only HEAD~1 HEAD | grep -q "^packages/shared/prisma/"; then
-            echo "has_changes=true" >> $GITHUB_OUTPUT
-            echo "📦 Prisma migration files changed - will run migrations"
+          echo "=========================================="
+          echo "🔍 Detecting changed files..."
+          echo "=========================================="
+          
+          # Get the base commit to compare against
+          if [ "${{ github.event_name }}" == "push" ]; then
+            BASE_SHA="${{ github.event.before }}"
+            if [ "$BASE_SHA" == "0000000000000000000000000000000000000000" ]; then
+              BASE_SHA=$(git rev-parse HEAD~1 2>/dev/null || echo "")
+            fi
           else
-            echo "has_changes=false" >> $GITHUB_OUTPUT
-            echo "⏭️ No migration changes detected - will skip migrations"
+            BASE_SHA=$(git merge-base HEAD origin/main 2>/dev/null || git rev-parse HEAD~1)
           fi
+          
+          if [ -z "$BASE_SHA" ]; then
+            echo "⚠️ Could not determine base commit, will build everything"
+            echo "backend_changed=true" >> $GITHUB_OUTPUT
+            echo "frontend_changed=true" >> $GITHUB_OUTPUT
+            echo "migrations_changed=true" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          
+          echo "Comparing $BASE_SHA..HEAD"
+          CHANGED_FILES=$(git diff --name-only $BASE_SHA HEAD)
+          echo ""
+          echo "Changed files:"
+          echo "$CHANGED_FILES" | head -20
+          if [ $(echo "$CHANGED_FILES" | wc -l) -gt 20 ]; then
+            echo "... and more"
+          fi
+          echo ""
+          
+          # Backend: apps/backend/**, packages/shared/**
+          if echo "$CHANGED_FILES" | grep -qE "^(apps/backend/|packages/shared/)"; then
+            echo "backend_changed=true" >> $GITHUB_OUTPUT
+            echo "✅ Backend changes detected"
+          else
+            echo "backend_changed=false" >> $GITHUB_OUTPUT
+            echo "⏭️ No backend changes"
+          fi
+          
+          # Frontend: apps/admin/**, apps/core/**, apps/frontend/**, packages/shared/**
+          if echo "$CHANGED_FILES" | grep -qE "^(apps/admin/|apps/core/|apps/frontend/|packages/shared/)"; then
+            echo "frontend_changed=true" >> $GITHUB_OUTPUT
+            echo "✅ Frontend changes detected"
+          else
+            echo "frontend_changed=false" >> $GITHUB_OUTPUT
+            echo "⏭️ No frontend changes"
+          fi
+          
+          # Migrations: packages/shared/prisma/**
+          if echo "$CHANGED_FILES" | grep -qE "^packages/shared/prisma/"; then
+            echo "migrations_changed=true" >> $GITHUB_OUTPUT
+            echo "✅ Migration changes detected"
+          else
+            echo "migrations_changed=false" >> $GITHUB_OUTPUT
+            echo "⏭️ No migration changes"
+          fi
+          
+          echo "=========================================="
+
+  # ============================================
+  # Backend Pipeline - Build & Deploy
+  # ============================================
+  build-backend:
+    name: Build Backend
+    runs-on: ubuntu-latest
+    needs: detect-changes
+    environment: production
+    # Run if:
+    # - Manual trigger with backend-only, full, or deploy-only
+    # - Push with backend changes detected
+    if: |
+      always() &&
+      (needs.detect-changes.result == 'success' || needs.detect-changes.result == 'skipped') &&
+      github.event.inputs.action != 'frontend-only' &&
+      github.event.inputs.action != 'db-migrate' &&
+      github.event.inputs.action != 'db-seed' &&
+      github.event.inputs.action != 'db-migrate-and-seed' &&
+      (
+        github.event.inputs.action == 'backend-only' ||
+        github.event.inputs.action == 'full' ||
+        github.event.inputs.action == 'deploy-only' ||
+        needs.detect-changes.outputs.backend_changed == 'true'
+      )
+    
+    permissions:
+      id-token: write
+      contents: read
+
+    outputs:
+      image: ${{ steps.build.outputs.image }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        if: github.event.inputs.action != 'deploy-only'
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -85,13 +171,13 @@ jobs:
         uses: aws-actions/amazon-ecr-login@v2
 
       - name: Build and push backend image
-        id: build-backend
-        # Skip if frontend-only
-        if: ${{ github.event.inputs.action != 'frontend-only' }}
+        id: build
+        if: github.event.inputs.action != 'deploy-only'
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           IMAGE_TAG: ${{ github.sha }}
         run: |
+          echo "🔨 Building backend image..."
           docker build -f apps/backend/Dockerfile \
             -t $ECR_REGISTRY/$ECR_REPOSITORY_BACKEND:$IMAGE_TAG .
           docker tag $ECR_REGISTRY/$ECR_REPOSITORY_BACKEND:$IMAGE_TAG \
@@ -99,15 +185,130 @@ jobs:
           docker push $ECR_REGISTRY/$ECR_REPOSITORY_BACKEND:$IMAGE_TAG
           docker push $ECR_REGISTRY/$ECR_REPOSITORY_BACKEND:latest
           echo "image=$ECR_REGISTRY/$ECR_REPOSITORY_BACKEND:$IMAGE_TAG" >> $GITHUB_OUTPUT
+          echo "✅ Backend image pushed"
+
+      - name: Use latest image for deploy-only
+        id: latest
+        if: github.event.inputs.action == 'deploy-only'
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+        run: |
+          echo "image=$ECR_REGISTRY/$ECR_REPOSITORY_BACKEND:latest" >> $GITHUB_OUTPUT
+          echo "📦 Using latest backend image"
+
+  deploy-backend:
+    name: Deploy Backend
+    runs-on: ubuntu-latest
+    needs: [detect-changes, build-backend, db-operations]
+    environment: production
+    if: |
+      always() &&
+      needs.build-backend.result == 'success' &&
+      (needs.db-operations.result == 'success' || needs.db-operations.result == 'skipped')
+    
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Get backend image
+        id: get-image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+        run: |
+          if [ -n "${{ needs.build-backend.outputs.image }}" ]; then
+            echo "image=${{ needs.build-backend.outputs.image }}" >> $GITHUB_OUTPUT
+          else
+            echo "image=$ECR_REGISTRY/$ECR_REPOSITORY_BACKEND:latest" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Download current backend task definition
+        run: |
+          aws ecs describe-task-definition \
+            --task-definition ${{ env.ECS_SERVICE_BACKEND }} \
+            --query taskDefinition > task-definition-backend.json
+
+      - name: Update backend task definition with new image
+        id: task-def
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition: task-definition-backend.json
+          container-name: backend
+          image: ${{ steps.get-image.outputs.image }}
+
+      - name: Deploy backend to Amazon ECS
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v1
+        with:
+          task-definition: ${{ steps.task-def.outputs.task-definition }}
+          service: ${{ env.ECS_SERVICE_BACKEND }}
+          cluster: ${{ env.ECS_CLUSTER }}
+          wait-for-service-stability: true
+
+  # ============================================
+  # Frontend Pipeline - Build & Deploy (parallel with backend)
+  # ============================================
+  build-frontend:
+    name: Build Frontend
+    runs-on: ubuntu-latest
+    needs: detect-changes
+    environment: production
+    # Run if:
+    # - Manual trigger with frontend-only, full, or deploy-only
+    # - Push with frontend changes detected
+    if: |
+      always() &&
+      (needs.detect-changes.result == 'success' || needs.detect-changes.result == 'skipped') &&
+      github.event.inputs.action != 'backend-only' &&
+      github.event.inputs.action != 'db-migrate' &&
+      github.event.inputs.action != 'db-seed' &&
+      github.event.inputs.action != 'db-migrate-and-seed' &&
+      (
+        github.event.inputs.action == 'frontend-only' ||
+        github.event.inputs.action == 'full' ||
+        github.event.inputs.action == 'deploy-only' ||
+        needs.detect-changes.outputs.frontend_changed == 'true'
+      )
+    
+    permissions:
+      id-token: write
+      contents: read
+
+    outputs:
+      image: ${{ steps.build.outputs.image }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        if: github.event.inputs.action != 'deploy-only'
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
 
       - name: Build and push frontend image
-        id: build-frontend
-        # Skip if backend-only
-        if: ${{ github.event.inputs.action != 'backend-only' }}
+        id: build
+        if: github.event.inputs.action != 'deploy-only'
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           IMAGE_TAG: ${{ github.sha }}
         run: |
+          echo "🔨 Building frontend image..."
           docker build -f apps/frontend/Dockerfile \
             --build-arg NEXT_PUBLIC_API_URL=https://api.truestack.my \
             -t $ECR_REGISTRY/$ECR_REPOSITORY_FRONTEND:$IMAGE_TAG .
@@ -116,39 +317,94 @@ jobs:
           docker push $ECR_REGISTRY/$ECR_REPOSITORY_FRONTEND:$IMAGE_TAG
           docker push $ECR_REGISTRY/$ECR_REPOSITORY_FRONTEND:latest
           echo "image=$ECR_REGISTRY/$ECR_REPOSITORY_FRONTEND:$IMAGE_TAG" >> $GITHUB_OUTPUT
+          echo "✅ Frontend image pushed"
 
-      - name: Build and push migrations image
-        id: build-migrations
-        if: steps.check-migrations.outputs.has_changes == 'true'
+      - name: Use latest image for deploy-only
+        id: latest
+        if: github.event.inputs.action == 'deploy-only'
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          IMAGE_TAG: ${{ github.sha }}
         run: |
-          docker build -f Dockerfile.migrations \
-            -t $ECR_REGISTRY/$ECR_REPOSITORY_BACKEND:$IMAGE_TAG-migrations .
-          docker tag $ECR_REGISTRY/$ECR_REPOSITORY_BACKEND:$IMAGE_TAG-migrations \
-            $ECR_REGISTRY/$ECR_REPOSITORY_BACKEND:latest-migrations
-          docker push $ECR_REGISTRY/$ECR_REPOSITORY_BACKEND:$IMAGE_TAG-migrations
-          docker push $ECR_REGISTRY/$ECR_REPOSITORY_BACKEND:latest-migrations
-          echo "image=$ECR_REGISTRY/$ECR_REPOSITORY_BACKEND:$IMAGE_TAG-migrations" >> $GITHUB_OUTPUT
+          echo "image=$ECR_REGISTRY/$ECR_REPOSITORY_FRONTEND:latest" >> $GITHUB_OUTPUT
+          echo "📦 Using latest frontend image"
 
+  deploy-frontend:
+    name: Deploy Frontend
+    runs-on: ubuntu-latest
+    needs: [detect-changes, build-frontend]
+    environment: production
+    if: |
+      always() &&
+      needs.build-frontend.result == 'success'
+    
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Get frontend image
+        id: get-image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+        run: |
+          if [ -n "${{ needs.build-frontend.outputs.image }}" ]; then
+            echo "image=${{ needs.build-frontend.outputs.image }}" >> $GITHUB_OUTPUT
+          else
+            echo "image=$ECR_REGISTRY/$ECR_REPOSITORY_FRONTEND:latest" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Download current frontend task definition
+        run: |
+          aws ecs describe-task-definition \
+            --task-definition ${{ env.ECS_SERVICE_FRONTEND }} \
+            --query taskDefinition > task-definition-frontend.json
+
+      - name: Update frontend task definition with new image
+        id: task-def
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition: task-definition-frontend.json
+          container-name: frontend
+          image: ${{ steps.get-image.outputs.image }}
+
+      - name: Deploy frontend to Amazon ECS
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v1
+        with:
+          task-definition: ${{ steps.task-def.outputs.task-definition }}
+          service: ${{ env.ECS_SERVICE_FRONTEND }}
+          cluster: ${{ env.ECS_CLUSTER }}
+          wait-for-service-stability: true
+
+  # ============================================
+  # Database Operations - runs after backend build (before backend deploy)
+  # ============================================
   db-operations:
     name: Database Operations
     runs-on: ubuntu-latest
-    needs: build
-    # Run if: db-migrate, db-seed, db-migrate-and-seed, OR (full deploy with migration changes and not skipped)
+    needs: [detect-changes, build-backend]
+    environment: production
     if: |
-      always() && (
+      always() &&
+      (
         github.event.inputs.action == 'db-migrate' ||
         github.event.inputs.action == 'db-seed' ||
         github.event.inputs.action == 'db-migrate-and-seed' ||
         (
-          github.event.inputs.action == 'full' &&
+          github.event.inputs.action != 'frontend-only' &&
           github.event.inputs.skip_migrations != 'true' &&
-          needs.build.outputs.has_migration_changes == 'true'
+          needs.detect-changes.outputs.migrations_changed == 'true'
         )
       )
-    environment: production
     
     permissions:
       id-token: write
@@ -188,14 +444,12 @@ jobs:
         run: |
           ACTION="${{ github.event.inputs.action }}"
           
-          # Determine if we should run migrations
-          if [ "$ACTION" == "db-migrate" ] || [ "$ACTION" == "db-migrate-and-seed" ] || [ "$ACTION" == "full" ]; then
+          if [ "$ACTION" == "db-migrate" ] || [ "$ACTION" == "db-migrate-and-seed" ] || [ "$ACTION" == "full" ] || [ -z "$ACTION" ]; then
             echo "run_migrations=true" >> $GITHUB_OUTPUT
           else
             echo "run_migrations=false" >> $GITHUB_OUTPUT
           fi
           
-          # Determine if we should run seed
           if [ "$ACTION" == "db-seed" ] || [ "$ACTION" == "db-migrate-and-seed" ]; then
             echo "run_seed=true" >> $GITHUB_OUTPUT
           else
@@ -203,30 +457,17 @@ jobs:
           fi
           
           echo "=========================================="
-          echo "📋 Database Operation: $ACTION"
-          echo "=========================================="
-          if [ "$ACTION" == "db-migrate" ] || [ "$ACTION" == "db-migrate-and-seed" ] || [ "$ACTION" == "full" ]; then
-            echo "   ✅ Will run Prisma migrations"
-          else
-            echo "   ⏭️  Skipping migrations"
-          fi
-          if [ "$ACTION" == "db-seed" ] || [ "$ACTION" == "db-migrate-and-seed" ]; then
-            echo "   ✅ Will run database seed"
-          else
-            echo "   ⏭️  Skipping seed"
-          fi
+          echo "📋 Database Operation: ${ACTION:-auto}"
           echo "=========================================="
 
       - name: Run database task
         id: run-db-task
         run: |
-          # Get task definition ARN
           TASK_DEF_ARN=$(aws ecs describe-task-definition \
             --task-definition ${{ env.ECS_TASK_MIGRATIONS }} \
             --query 'taskDefinition.taskDefinitionArn' \
             --output text)
           
-          # Get network configuration from the backend service
           SUBNETS=$(aws ecs describe-services \
             --cluster ${{ env.ECS_CLUSTER }} \
             --services ${{ env.ECS_SERVICE_BACKEND }} \
@@ -239,11 +480,6 @@ jobs:
             --query 'services[0].networkConfiguration.awsvpcConfiguration.securityGroups' \
             --output text | tr '\t' ',')
           
-          echo "Running database task..."
-          echo "  Cluster: ${{ env.ECS_CLUSTER }}"
-          echo "  Task Definition: $TASK_DEF_ARN"
-          
-          # Build environment overrides based on operation
           RUN_MIGRATIONS="${{ steps.operation.outputs.run_migrations }}"
           RUN_SEED="${{ steps.operation.outputs.run_seed }}"
           
@@ -252,20 +488,16 @@ jobs:
           
           if [ "$RUN_MIGRATIONS" == "true" ]; then
             ENV_VARS='{"name":"RUN_MIGRATIONS","value":"true"}'
-            echo "  ✅ Will run Prisma migrations"
           else
             ENV_VARS='{"name":"SKIP_MIGRATIONS","value":"true"}'
-            echo "  ⏭️ Skipping migrations"
           fi
           
           if [ "$RUN_SEED" == "true" ]; then
             ENV_VARS="$ENV_VARS,"'{"name":"SEED_DATABASE","value":"true"}'
-            echo "  ✅ Will run database seed"
           fi
           
           OVERRIDES="$OVERRIDES$ENV_VARS]}]}"
           
-          # Run the task
           TASK_ARN=$(aws ecs run-task \
             --cluster ${{ env.ECS_CLUSTER }} \
             --task-definition $TASK_DEF_ARN \
@@ -276,7 +508,6 @@ jobs:
             --output text)
           
           echo "task_arn=$TASK_ARN" >> $GITHUB_OUTPUT
-          echo ""
           echo "🚀 Task started: $TASK_ARN"
 
       - name: Wait for database task to complete
@@ -284,12 +515,9 @@ jobs:
           TASK_ARN="${{ steps.run-db-task.outputs.task_arn }}"
           TASK_ID=$(echo $TASK_ARN | awk -F'/' '{print $NF}')
           
-          echo "=========================================="
           echo "⏳ Waiting for database task to complete..."
           echo "   Task ID: $TASK_ID"
-          echo "=========================================="
           
-          # Wait for task to complete (max 5 minutes)
           for i in {1..30}; do
             STATUS=$(aws ecs describe-tasks \
               --cluster ${{ env.ECS_CLUSTER }} \
@@ -300,19 +528,12 @@ jobs:
             echo "  [$i/30] Status: $STATUS"
             
             if [ "$STATUS" == "STOPPED" ]; then
-              # Check exit code
               EXIT_CODE=$(aws ecs describe-tasks \
                 --cluster ${{ env.ECS_CLUSTER }} \
                 --tasks $TASK_ARN \
                 --query 'tasks[0].containers[0].exitCode' \
                 --output text)
               
-              echo ""
-              echo "=========================================="
-              echo "📋 Task Completed - Fetching Logs"
-              echo "=========================================="
-              
-              # Always try to get logs
               echo ""
               echo "📜 Container Logs:"
               echo "------------------------------------------"
@@ -323,83 +544,23 @@ jobs:
                 --query 'events[*].message' \
                 --output text 2>/dev/null || echo "(No logs available yet)"
               echo "------------------------------------------"
-              echo ""
               
-              # If no exit code, the container never started - get the failure reason
               if [ "$EXIT_CODE" == "None" ] || [ -z "$EXIT_CODE" ]; then
                 echo "❌ Task failed before container could start"
-                
                 STOPPED_REASON=$(aws ecs describe-tasks \
                   --cluster ${{ env.ECS_CLUSTER }} \
                   --tasks $TASK_ARN \
                   --query 'tasks[0].stoppedReason' \
                   --output text)
                 echo "Stopped reason: $STOPPED_REASON"
-                
-                CONTAINER_REASON=$(aws ecs describe-tasks \
-                  --cluster ${{ env.ECS_CLUSTER }} \
-                  --tasks $TASK_ARN \
-                  --query 'tasks[0].containers[0].reason' \
-                  --output text)
-                echo "Container reason: $CONTAINER_REASON"
-                
                 exit 1
               fi
               
               if [ "$EXIT_CODE" == "0" ]; then
-                echo "=========================================="
                 echo "✅ DATABASE OPERATION COMPLETED SUCCESSFULLY!"
-                echo "=========================================="
-                
-                # Show operation summary
-                RUN_MIGRATIONS="${{ steps.operation.outputs.run_migrations }}"
-                RUN_SEED="${{ steps.operation.outputs.run_seed }}"
-                
-                if [ "$RUN_MIGRATIONS" == "true" ]; then
-                  echo "   ✅ Migrations: PASSED"
-                fi
-                if [ "$RUN_SEED" == "true" ]; then
-                  echo "   ✅ Seed: PASSED"
-                fi
-                echo "=========================================="
                 exit 0
               else
-                echo "=========================================="
-                echo "❌ DATABASE OPERATION FAILED"
-                echo "=========================================="
-                echo "Exit code: $EXIT_CODE"
-                
-                # Show operation summary
-                RUN_MIGRATIONS="${{ steps.operation.outputs.run_migrations }}"
-                RUN_SEED="${{ steps.operation.outputs.run_seed }}"
-                
-                if [ "$RUN_MIGRATIONS" == "true" ]; then
-                  echo "   ❌ Migrations: FAILED"
-                fi
-                if [ "$RUN_SEED" == "true" ]; then
-                  echo "   ❌ Seed: FAILED (or not reached)"
-                fi
-                
-                # Get stopped reason
-                STOPPED_REASON=$(aws ecs describe-tasks \
-                  --cluster ${{ env.ECS_CLUSTER }} \
-                  --tasks $TASK_ARN \
-                  --query 'tasks[0].stoppedReason' \
-                  --output text)
-                echo ""
-                echo "Stopped reason: $STOPPED_REASON"
-                
-                # Get container reason if available
-                CONTAINER_REASON=$(aws ecs describe-tasks \
-                  --cluster ${{ env.ECS_CLUSTER }} \
-                  --tasks $TASK_ARN \
-                  --query 'tasks[0].containers[0].reason' \
-                  --output text)
-                if [ "$CONTAINER_REASON" != "None" ]; then
-                  echo "Container reason: $CONTAINER_REASON"
-                fi
-                echo "=========================================="
-                
+                echo "❌ DATABASE OPERATION FAILED (exit code: $EXIT_CODE)"
                 exit 1
               fi
             fi
@@ -407,175 +568,58 @@ jobs:
             sleep 10
           done
           
-          echo "=========================================="
           echo "❌ DATABASE TASK TIMED OUT"
-          echo "=========================================="
-          echo "Task did not complete within 5 minutes."
-          echo "Check AWS ECS console for more details."
           exit 1
 
-  deploy-backend:
-    name: Deploy Backend to ECS
-    runs-on: ubuntu-latest
-    needs: [build, db-operations]
-    # Skip for db-* operations and frontend-only
-    if: |
-      always() &&
-      github.event.inputs.action != 'db-migrate' &&
-      github.event.inputs.action != 'db-seed' &&
-      github.event.inputs.action != 'db-migrate-and-seed' &&
-      github.event.inputs.action != 'frontend-only' &&
-      (needs.build.result == 'success' || github.event.inputs.action == 'deploy-only') &&
-      (needs.db-operations.result == 'success' || needs.db-operations.result == 'skipped')
-    environment: production
-    
-    permissions:
-      id-token: write
-      contents: read
-
-    steps:
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
-          aws-region: ${{ env.AWS_REGION }}
-
-      - name: Login to Amazon ECR
-        id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v2
-
-      - name: Get backend image to deploy
-        id: get-image
-        env:
-          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-        run: |
-          if [ "${{ github.event.inputs.action }}" == "deploy-only" ]; then
-            echo "image=$ECR_REGISTRY/${{ env.ECR_REPOSITORY_BACKEND }}:latest" >> $GITHUB_OUTPUT
-            echo "📦 Using latest backend image"
-          else
-            echo "image=${{ needs.build.outputs.backend_image }}" >> $GITHUB_OUTPUT
-            echo "📦 Using newly built backend image: ${{ needs.build.outputs.backend_image }}"
-          fi
-
-      - name: Download current backend task definition
-        run: |
-          aws ecs describe-task-definition \
-            --task-definition ${{ env.ECS_SERVICE_BACKEND }} \
-            --query taskDefinition > task-definition-backend.json
-
-      - name: Update backend task definition with new image
-        id: task-def
-        uses: aws-actions/amazon-ecs-render-task-definition@v1
-        with:
-          task-definition: task-definition-backend.json
-          container-name: backend
-          image: ${{ steps.get-image.outputs.image }}
-
-      - name: Deploy backend to Amazon ECS
-        uses: aws-actions/amazon-ecs-deploy-task-definition@v1
-        with:
-          task-definition: ${{ steps.task-def.outputs.task-definition }}
-          service: ${{ env.ECS_SERVICE_BACKEND }}
-          cluster: ${{ env.ECS_CLUSTER }}
-          wait-for-service-stability: true
-
-  deploy-frontend:
-    name: Deploy Frontend to ECS
-    runs-on: ubuntu-latest
-    needs: [build, db-operations, deploy-backend]
-    # Skip for db-* operations and backend-only
-    if: |
-      always() &&
-      github.event.inputs.action != 'db-migrate' &&
-      github.event.inputs.action != 'db-seed' &&
-      github.event.inputs.action != 'db-migrate-and-seed' &&
-      github.event.inputs.action != 'backend-only' &&
-      (needs.build.result == 'success' || github.event.inputs.action == 'deploy-only') &&
-      (needs.db-operations.result == 'success' || needs.db-operations.result == 'skipped') &&
-      (needs.deploy-backend.result == 'success' || needs.deploy-backend.result == 'skipped')
-    environment: production
-    
-    permissions:
-      id-token: write
-      contents: read
-
-    steps:
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
-          aws-region: ${{ env.AWS_REGION }}
-
-      - name: Login to Amazon ECR
-        id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v2
-
-      - name: Get frontend image to deploy
-        id: get-image
-        env:
-          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-        run: |
-          if [ "${{ github.event.inputs.action }}" == "deploy-only" ]; then
-            echo "image=$ECR_REGISTRY/${{ env.ECR_REPOSITORY_FRONTEND }}:latest" >> $GITHUB_OUTPUT
-            echo "📦 Using latest frontend image"
-          else
-            echo "image=${{ needs.build.outputs.frontend_image }}" >> $GITHUB_OUTPUT
-            echo "📦 Using newly built frontend image: ${{ needs.build.outputs.frontend_image }}"
-          fi
-
-      - name: Download current frontend task definition
-        run: |
-          aws ecs describe-task-definition \
-            --task-definition ${{ env.ECS_SERVICE_FRONTEND }} \
-            --query taskDefinition > task-definition-frontend.json
-
-      - name: Update frontend task definition with new image
-        id: task-def
-        uses: aws-actions/amazon-ecs-render-task-definition@v1
-        with:
-          task-definition: task-definition-frontend.json
-          container-name: frontend
-          image: ${{ steps.get-image.outputs.image }}
-
-      - name: Deploy frontend to Amazon ECS
-        uses: aws-actions/amazon-ecs-deploy-task-definition@v1
-        with:
-          task-definition: ${{ steps.task-def.outputs.task-definition }}
-          service: ${{ env.ECS_SERVICE_FRONTEND }}
-          cluster: ${{ env.ECS_CLUSTER }}
-          wait-for-service-stability: true
-
+  # ============================================
+  # Summary
+  # ============================================
   summary:
     name: Deployment Summary
     runs-on: ubuntu-latest
-    needs: [build, db-operations, deploy-backend, deploy-frontend]
+    needs: [detect-changes, build-backend, build-frontend, db-operations, deploy-backend, deploy-frontend]
     if: always()
     
     steps:
       - name: Deployment summary
         run: |
           echo "=========================================="
-          echo "Deployment Summary"
+          echo "📋 Deployment Summary"
           echo "=========================================="
           echo ""
-          echo "Action: ${{ github.event.inputs.action || 'full' }}"
-          echo "Build: ${{ needs.build.result }}"
-          echo "Database Operations: ${{ needs.db-operations.result }}"
-          echo "Backend Deploy: ${{ needs.deploy-backend.result }}"
-          echo "Frontend Deploy: ${{ needs.deploy-frontend.result }}"
+          echo "Trigger: ${{ github.event_name }}"
+          echo "Action: ${{ github.event.inputs.action || 'auto' }}"
+          echo ""
+          echo "📦 Change Detection:"
+          echo "   Backend changes: ${{ needs.detect-changes.outputs.backend_changed || 'n/a' }}"
+          echo "   Frontend changes: ${{ needs.detect-changes.outputs.frontend_changed || 'n/a' }}"
+          echo "   Migration changes: ${{ needs.detect-changes.outputs.migrations_changed || 'n/a' }}"
+          echo ""
+          echo "🔧 Job Results:"
+          echo "   Build Backend: ${{ needs.build-backend.result }}"
+          echo "   Build Frontend: ${{ needs.build-frontend.result }}"
+          echo "   Database Operations: ${{ needs.db-operations.result }}"
+          echo "   Deploy Backend: ${{ needs.deploy-backend.result }}"
+          echo "   Deploy Frontend: ${{ needs.deploy-frontend.result }}"
           echo ""
           
-          ACTION="${{ github.event.inputs.action || 'full' }}"
-          
-          # Check success based on action type
-          if [ "$ACTION" == "db-migrate" ] || [ "$ACTION" == "db-seed" ] || [ "$ACTION" == "db-migrate-and-seed" ]; then
-            if [ "${{ needs.db-operations.result }}" == "success" ]; then
-              echo "✅ Database operation completed successfully!"
-            else
-              echo "❌ Database operation failed - check logs above"
-            fi
-          elif [ "${{ needs.deploy-backend.result }}" == "success" ] || [ "${{ needs.deploy-frontend.result }}" == "success" ]; then
-            echo "✅ Deployment Complete!"
-          else
-            echo "⚠️ Deployment may have issues - check logs above"
+          DEPLOYED=""
+          if [ "${{ needs.deploy-backend.result }}" == "success" ]; then
+            DEPLOYED="backend"
           fi
+          if [ "${{ needs.deploy-frontend.result }}" == "success" ]; then
+            if [ -n "$DEPLOYED" ]; then
+              DEPLOYED="$DEPLOYED + frontend"
+            else
+              DEPLOYED="frontend"
+            fi
+          fi
+          
+          if [ -n "$DEPLOYED" ]; then
+            echo "✅ Deployed: $DEPLOYED"
+          elif [ "${{ needs.deploy-backend.result }}" == "skipped" ] && [ "${{ needs.deploy-frontend.result }}" == "skipped" ]; then
+            echo "⏭️ No deployments needed"
+          else
+            echo "⚠️ Check logs for details"
+          fi
+          echo "=========================================="

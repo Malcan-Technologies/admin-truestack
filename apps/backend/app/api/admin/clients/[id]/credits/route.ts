@@ -102,7 +102,7 @@ export async function POST(
     }
 
     // Validate type
-    const validTypes = ["topup", "adjustment", "refund"];
+    const validTypes = ["topup", "adjustment", "refund", "included"];
     if (!type || !validTypes.includes(type)) {
       return NextResponse.json(
         { error: `Type must be one of: ${validTypes.join(", ")}` },
