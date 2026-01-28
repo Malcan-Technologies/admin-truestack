@@ -11,7 +11,7 @@ export type {
   CreditLedger,
   KycSession,
   WebhookLog,
-} from "@prisma/client";
+} from "../generated/prisma/client";
 
 // API Key types
 export interface GeneratedApiKey {

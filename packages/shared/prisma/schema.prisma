@@ -2,8 +2,8 @@
 // This schema mirrors the existing database structure
 
 generator client {
-  provider = "prisma-client-js"
-  output   = "../node_modules/.prisma/client"
+  provider = "prisma-client"
+  output   = "../generated/prisma"
 }
 
 datasource db {

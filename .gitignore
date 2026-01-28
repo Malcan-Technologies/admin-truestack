@@ -40,6 +40,9 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
+# Prisma generated client
+packages/shared/generated/
+
 # Terraform
 terraform/.terraform/
 terraform/*.tfstate

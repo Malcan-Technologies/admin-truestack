@@ -1,5 +1,5 @@
 # Migration Runner Dockerfile
-# This is a lightweight image just for running Prisma migrations
+# This is a lightweight image just for running Prisma migrations and seeding
 
 FROM node:22-alpine
 
@@ -13,13 +13,19 @@ COPY pnpm-workspace.yaml package.json pnpm-lock.yaml ./
 COPY packages/shared/package.json ./packages/shared/
 COPY packages/shared/prisma.config.mjs ./packages/shared/
 COPY packages/shared/prisma/ ./packages/shared/prisma/
+COPY packages/shared/lib/ ./packages/shared/lib/
+COPY packages/shared/types/ ./packages/shared/types/
 
-# Install dependencies for shared package
+# Install dependencies for shared package (includes devDependencies for tsx)
 RUN pnpm install --frozen-lockfile --filter @truestack/shared
 
-# Generate Prisma client (required for seed script)
+# Generate Prisma client (outputs to packages/shared/generated/prisma)
 WORKDIR /app/packages/shared
 RUN npx prisma generate
+
+# Verify generation succeeded
+RUN ls -la generated/prisma/ | head -5
+
 WORKDIR /app
 
 # Copy migration script

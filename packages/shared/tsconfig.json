@@ -12,6 +12,6 @@
     "noEmit": true,
     "types": ["node"]
   },
-  "include": ["lib/**/*", "types/**/*", "prisma/**/*"],
+  "include": ["lib/**/*", "types/**/*", "prisma/**/*", "generated/**/*"],
   "exclude": ["node_modules"]
 }
