@@ -282,7 +282,7 @@ model WebhookLog {
   id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   kycSessionId String   @map("kyc_session_id") @db.Uuid
   source       String   // innovatif_callback, manual_retry
-  payloadHash  String   @map("payload_hash") // SHA256 for deduplication
+  payloadHash  String   @unique @map("payload_hash") // SHA256 for deduplication
   processed    Boolean  @default(false)
   errorMessage String?  @map("error_message")
   createdAt    DateTime @default(now()) @map("created_at")
@@ -291,7 +291,6 @@ model WebhookLog {
   kycSession KycSession @relation(fields: [kycSessionId], references: [id])
 
   @@index([kycSessionId])
-  @@index([payloadHash])
   @@map("webhook_log")
 }
 

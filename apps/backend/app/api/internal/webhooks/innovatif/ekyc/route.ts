@@ -214,13 +214,28 @@ export async function POST(request: NextRequest) {
 
     // Process webhook in transaction
     await withTransaction(async (txClient) => {
-      // Log webhook
-      await txClient.query(
-        `INSERT INTO webhook_log (kyc_session_id, source, payload_hash, processed)
-         VALUES ($1, 'innovatif_callback', $2, true)
-         ON CONFLICT (payload_hash) DO UPDATE SET processed = true`,
-        [session.id, payloadHash]
-      );
+      // Log webhook - use INSERT with ON CONFLICT for idempotency
+      // If unique constraint doesn't exist yet, fall back to simple insert
+      try {
+        await txClient.query(
+          `INSERT INTO webhook_log (kyc_session_id, source, payload_hash, processed)
+           VALUES ($1, 'innovatif_callback', $2, true)
+           ON CONFLICT (payload_hash) DO UPDATE SET processed = true`,
+          [session.id, payloadHash]
+        );
+      } catch (error: unknown) {
+        // If ON CONFLICT fails due to missing constraint, try simple insert
+        if (error instanceof Error && error.message.includes("no unique or exclusion constraint")) {
+          console.warn("Unique constraint on payload_hash missing - using simple insert");
+          await txClient.query(
+            `INSERT INTO webhook_log (kyc_session_id, source, payload_hash, processed)
+             VALUES ($1, 'innovatif_callback', $2, true)`,
+            [session.id, payloadHash]
+          );
+        } else {
+          throw error;
+        }
+      }
 
       // Map Innovatif status to our status
       // Innovatif status values:
