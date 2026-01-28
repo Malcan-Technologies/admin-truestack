@@ -219,9 +219,64 @@ Example ledger:
 
 ---
 
-## Webhook Payloads
+## Webhook Architecture
 
-### Innovatif → TrueStack (Internal)
+TrueStack acts as a **middleware layer** between Innovatif and our clients. There are two separate webhook flows:
+
+```
+┌──────────────┐         ┌──────────────┐         ┌──────────────┐
+│  Innovatif   │────────►│  TrueStack   │────────►│   Client's   │
+│  (Provider)  │         │  (Our API)   │         │   Webhook    │
+└──────────────┘         └──────────────┘         └──────────────┘
+       │                        │                        │
+       │  backend_url           │  webhook_url           │
+       │  (always our endpoint) │  (client's endpoint)   │
+       │                        │                        │
+```
+
+### URL Configuration
+
+| URL Parameter | Set By | Purpose | Value |
+|---------------|--------|---------|-------|
+| `backend_url` | TrueStack (hardcoded) | Innovatif → TrueStack webhook | `{API_URL}/api/internal/webhooks/innovatif/ekyc` |
+| `response_url` | TrueStack (hardcoded) | User redirect after KYC | `{CORE_URL}/r/{session_id}` |
+| `webhook_url` | Client (**required per request**) | TrueStack → Client webhook | Client's webhook endpoint |
+
+### Innovatif API Parameters (Hardcoded)
+
+When TrueStack creates a transaction with Innovatif, we set these values:
+
+| Parameter | Value | Description |
+|-----------|-------|-------------|
+| `backend_url` | `{BETTER_AUTH_URL}/api/internal/webhooks/innovatif/ekyc` | Our webhook receiver (clients cannot change) |
+| `response_url` | `{CORE_APP_URL}/r/{session_id}` | TrueStack's status page showing verification result |
+| `callback_mode` | `"1"` | Summary mode - includes OCR data but not full images |
+| `response_mode` | `"1"` | Include status params in redirect URL query string |
+
+**Note:** Innovatif only supports a single `response_url`, so all users are redirected to TrueStack's status page (`/r/{session_id}`) which displays the verification result (success/failure) based on query parameters.
+
+### Client Webhook Configuration
+
+The `webhook_url` is **required** for every session creation request. This ensures clients always receive webhook notifications for their sessions.
+
+```javascript
+// webhook_url is REQUIRED
+POST /api/v1/kyc/sessions
+{
+  "document_name": "John Doe",
+  "document_number": "901234-56-7890",
+  "webhook_url": "https://myapp.com/webhooks/kyc"  // Required - will reject if missing
+}
+```
+
+**Validation Rules:**
+- Must be provided in every request (no default/fallback)
+- Must be a valid HTTP or HTTPS URL
+- Request will be rejected with 400 error if missing or invalid format
+
+### Webhook Payloads
+
+#### Innovatif → TrueStack (Internal)
 
 Innovatif sends an encrypted webhook to our internal endpoint:
 
@@ -237,12 +292,13 @@ Content-Type: application/json
 Decrypted payload contains:
 - `ref_id`: Our session reference
 - `onboarding_id`: Innovatif's ID
-- `status`: "completed", "expired", "failed"
-- `result`: "PASS", "FAIL"
-- `name`, `id_number`, `address`, etc. (OCR data)
-- `front_document`, `face_image` (base64 images)
+- `status`: 2 (completed), 3 (expired)
+- `result`: 1 (approved), 0 (rejected)
+- `step1.ocr_result`: OCR data (name, IC number, address, etc.)
+- `step2`: Face match results
+- Images (in detail mode): `front_document_image`, `back_document_image`, `face_image`, `best_frame`
 
-### TrueStack → Client (External)
+#### TrueStack → Client (External)
 
 We send a webhook to the client's configured `webhook_url`:
 
@@ -263,6 +319,17 @@ X-TrueStack-Event: kyc.session.completed
   "timestamp": "2026-01-28T10:30:00Z"
 }
 ```
+
+### Webhook Delivery
+
+| Field | Description |
+|-------|-------------|
+| `webhook_delivered` | Boolean - true if webhook was successfully delivered |
+| `webhook_delivered_at` | Timestamp of successful delivery |
+| `webhook_attempts` | Number of delivery attempts |
+| `webhook_last_error` | Last error message if delivery failed |
+
+Webhook delivery is attempted once. If no `webhook_url` is configured (neither at session nor client level), no webhook is sent.
 
 ---
 
@@ -332,10 +399,67 @@ The API key:
 
 ## Demo Mode
 
-The admin portal includes a demo page (`/demo/trueidentity`) that:
-- Creates a `DEMO_CLIENT` with test credentials
-- Simulates the full webhook flow
-- Stores demo webhooks in `demo_webhook` table
-- Shows billing/ledger in real-time
+The admin portal includes a demo page (`/demo/trueidentity`) that simulates a real client integration.
 
-**Note:** In local development, Innovatif webhooks cannot reach `localhost`. The demo shows the redirect status instead.
+### Demo Client Setup
+
+| Component | Value |
+|-----------|-------|
+| Client Code | `DEMO_CLIENT` |
+| allow_overdraft | `true` (enabled by default) |
+
+### Demo Session Request
+
+When creating a session from the demo page, the request includes:
+
+```javascript
+{
+  "document_name": "John Doe",
+  "document_number": "901234567890",
+  "document_type": "1",
+  "webhook_url": "{API_URL}/api/demo/webhook",  // Points to our demo webhook receiver
+  "metadata": { "demo": true }
+}
+```
+
+Note: `webhook_url` is passed per-request (required by the API), pointing to the demo webhook receiver endpoint.
+
+### Demo Webhook Flow
+
+```
+┌──────────────┐         ┌──────────────┐         ┌──────────────┐
+│  Innovatif   │────────►│  TrueStack   │────────►│  Demo Webhook│
+│              │         │  Webhook     │         │  Receiver    │
+└──────────────┘         └──────────────┘         └──────────────┘
+       │                        │                        │
+       │                        │                        ▼
+       │                        │              ┌──────────────────┐
+       │                        │              │  demo_webhook    │
+       │                        │              │  table (stores   │
+       │                        │              │  for display)    │
+       │                        │              └──────────────────┘
+```
+
+1. Demo page creates session with `webhook_url` pointing to `/api/demo/webhook`
+2. Innovatif sends webhook to `/api/internal/webhooks/innovatif/ekyc`
+3. TrueStack processes and forwards to the session's `webhook_url`
+4. Demo webhook endpoint stores the webhook in `demo_webhook` table
+5. Demo page polls and displays received webhooks
+
+### Local Development Limitation
+
+**Important:** In local development, Innovatif webhooks **cannot reach `localhost`**. This means:
+
+- The demo page will show the redirect URL status instead of webhook data
+- To test full webhook flow, deploy to a publicly accessible URL
+- The demo page includes a note explaining this limitation
+
+### Demo Features
+
+- **API Key Display**: Shows the demo client's API key (can regenerate)
+- **Credits Management**: Top-up credits for testing
+- **Pricing Tiers**: View configured pricing tiers
+- **Session Creation**: Create KYC sessions with form
+- **Webhook Log**: View received webhooks (when publicly accessible)
+- **Billing Tab**: View credit ledger showing deductions
+- **Allow Overdraft**: Demo client allows negative balance by default

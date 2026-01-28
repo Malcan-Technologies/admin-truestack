@@ -242,6 +242,7 @@ model KycSession {
   platform             String    @default("Web")
   successUrl           String?   @map("success_url")
   failUrl              String?   @map("fail_url")
+  webhookUrl           String?   @map("webhook_url") // Per-session webhook override
   metadata             Json      @default("{}")
   innovatifResponse    Json?     @map("innovatif_response")
   s3FrontDocument      String?   @map("s3_front_document")

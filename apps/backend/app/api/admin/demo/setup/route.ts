@@ -57,12 +57,12 @@ export async function GET(request: NextRequest) {
 
         const newClient = clientResult.rows[0];
 
-        // Create product config with demo webhook URL (allow_overdraft enabled by default)
-        const backendUrl = process.env.BETTER_AUTH_URL || "http://localhost:3001";
+        // Create product config (allow_overdraft enabled by default)
+        // Note: webhook_url is now required per-request, not stored at client level
         await txClient.query(
-          `INSERT INTO client_product_config (client_id, product_id, enabled, webhook_url, allow_overdraft)
-           VALUES ($1, 'true_identity', true, $2, true)`,
-          [newClient.id, `${backendUrl}/api/demo/webhook`]
+          `INSERT INTO client_product_config (client_id, product_id, enabled, allow_overdraft)
+           VALUES ($1, 'true_identity', true, true)`,
+          [newClient.id]
         );
 
         // Generate API key

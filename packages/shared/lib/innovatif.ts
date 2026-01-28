@@ -101,6 +101,9 @@ export function verifyWebhookSignature(
   );
 }
 
+// Valid platform values for Innovatif API
+export type InnovatifPlatform = "Web" | "iOS" | "Android";
+
 /**
  * Create a transaction on Innovatif eKYC Gateway
  */
@@ -111,6 +114,7 @@ export async function createInnovatifTransaction(
     documentNumber: string;
     documentType: string;
     sessionId: string;
+    platform?: InnovatifPlatform;
   },
   backendUrl: string,
   coreUrl?: string
@@ -125,6 +129,7 @@ export async function createInnovatifTransaction(
   const redirectBaseUrl = coreUrl || backendUrl;
 
   // Build request body per Innovatif API spec
+  // Default platform to "Web" if not specified
   const requestBody = {
     api_key: API_KEY,
     package_name: PACKAGE_NAME,
@@ -132,7 +137,7 @@ export async function createInnovatifTransaction(
     document_name: params.documentName,
     document_number: params.documentNumber,
     document_type: params.documentType,
-    platform: "Web",
+    platform: params.platform || "Web",
     signature: signature,
     response_url: `${redirectBaseUrl}/r/${params.sessionId}`,
     backend_url: `${backendUrl}/api/internal/webhooks/innovatif/ekyc`,

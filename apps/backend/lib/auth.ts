@@ -1,4 +1,5 @@
 import { betterAuth } from "better-auth";
+import { admin } from "better-auth/plugins";
 import { Pool } from "pg";
 
 // Enable SSL for production PostgreSQL connections (required by RDS)
@@ -19,6 +20,14 @@ export const auth = betterAuth({
   }),
   baseURL: process.env.BETTER_AUTH_URL || "http://localhost:3001",
   secret: process.env.BETTER_AUTH_SECRET,
+
+  // Plugins
+  plugins: [
+    admin({
+      defaultRole: "ops",
+      adminRoles: ["super_admin"], // Only super_admin can manage users
+    }),
+  ],
 
   emailAndPassword: {
     enabled: true,

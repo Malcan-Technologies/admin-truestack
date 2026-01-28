@@ -337,10 +337,11 @@ async function triggerClientWebhook(sessionId: string) {
     document_name: string;
     document_number: string;
     metadata: Record<string, unknown>;
+    webhook_url: string | null;
   }>(
     `SELECT 
       ks.id, ks.client_id, ks.ref_id, ks.status, ks.result, 
-      ks.reject_message, ks.document_name, ks.document_number, ks.metadata
+      ks.reject_message, ks.document_name, ks.document_number, ks.metadata, ks.webhook_url
      FROM kyc_session ks
      WHERE ks.id = $1`,
     [sessionId]
@@ -348,14 +349,13 @@ async function triggerClientWebhook(sessionId: string) {
 
   if (!session) return;
 
-  const config = await queryOne<{ webhook_url: string | null }>(
-    `SELECT webhook_url FROM client_product_config 
-     WHERE client_id = $1 AND product_id = 'true_identity'`,
-    [session.client_id]
-  );
-
-  if (!config?.webhook_url) {
-    // No webhook configured
+  // webhook_url is required per session - no fallback needed
+  const webhookUrl = session.webhook_url;
+  
+  if (!webhookUrl) {
+    // This shouldn't happen as webhook_url is now required,
+    // but handle gracefully for any legacy sessions
+    console.warn(`Session ${sessionId} has no webhook_url configured`);
     return;
   }
 
@@ -373,7 +373,7 @@ async function triggerClientWebhook(sessionId: string) {
       timestamp: new Date().toISOString(),
     };
 
-    const response = await fetch(config.webhook_url, {
+    const response = await fetch(webhookUrl, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

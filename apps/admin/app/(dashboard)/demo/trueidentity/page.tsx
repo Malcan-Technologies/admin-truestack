@@ -251,6 +251,9 @@ export default function TrueIdentityDemoPage() {
     try {
       // Call the public KYC API using the demo client's API key
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+      // Demo webhook URL - this is where we receive the webhook for display in the demo
+      const demoWebhookUrl = `${apiUrl}/api/demo/webhook`;
+      
       const response = await fetch(`${apiUrl}/api/v1/kyc/sessions`, {
         method: "POST",
         headers: {
@@ -261,6 +264,7 @@ export default function TrueIdentityDemoPage() {
           document_name: documentName,
           document_number: documentNumber.replace(/-/g, ""),
           document_type: documentType,
+          webhook_url: demoWebhookUrl,
           metadata: { demo: true },
         }),
       });

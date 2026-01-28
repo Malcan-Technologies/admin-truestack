@@ -1,6 +1,7 @@
 "use client";
 
 import { createAuthClient } from "better-auth/react";
+import { adminClient } from "better-auth/client/plugins";
 
 // Admin app uses the backend API for authentication
 // The API_URL should point to the backend service
@@ -12,6 +13,7 @@ export const authClient = createAuthClient({
   fetchOptions: {
     credentials: "include", // Required for cross-origin cookie handling
   },
+  plugins: [adminClient()],
 });
 
-export const { signIn, signOut, useSession } = authClient;
+export const { signIn, signOut, useSession, changePassword } = authClient;

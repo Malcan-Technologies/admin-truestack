@@ -169,8 +169,10 @@ export async function POST(request: NextRequest) {
       document_name,
       document_number,
       document_type = "1",
+      platform = "Web",
       success_url,
       fail_url,
+      webhook_url,
       metadata = {},
     } = body;
 
@@ -178,6 +180,36 @@ export async function POST(request: NextRequest) {
     if (!document_name || !document_number) {
       return NextResponse.json(
         { error: "BAD_REQUEST", message: "document_name and document_number are required" },
+        { status: 400 }
+      );
+    }
+
+    // Validate webhook_url is required and must be a valid URL
+    if (!webhook_url) {
+      return NextResponse.json(
+        { error: "BAD_REQUEST", message: "webhook_url is required" },
+        { status: 400 }
+      );
+    }
+
+    // Validate webhook_url format
+    try {
+      const parsedUrl = new URL(webhook_url);
+      if (!["http:", "https:"].includes(parsedUrl.protocol)) {
+        throw new Error("Invalid protocol");
+      }
+    } catch {
+      return NextResponse.json(
+        { error: "BAD_REQUEST", message: "webhook_url must be a valid HTTP/HTTPS URL" },
+        { status: 400 }
+      );
+    }
+
+    // Validate platform if provided
+    const validPlatforms = ["Web", "iOS", "Android"];
+    if (!validPlatforms.includes(platform)) {
+      return NextResponse.json(
+        { error: "BAD_REQUEST", message: `platform must be one of: ${validPlatforms.join(", ")}` },
         { status: 400 }
       );
     }
@@ -192,8 +224,8 @@ export async function POST(request: NextRequest) {
       created_at: string;
     }>(
       `INSERT INTO kyc_session 
-        (client_id, ref_id, document_name, document_number, document_type, success_url, fail_url, metadata, expires_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW() + INTERVAL '24 hours')
+        (client_id, ref_id, document_name, document_number, document_type, platform, success_url, fail_url, webhook_url, metadata, expires_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW() + INTERVAL '24 hours')
        RETURNING id, ref_id, created_at`,
       [
         clientInfo.clientId,
@@ -201,8 +233,10 @@ export async function POST(request: NextRequest) {
         document_name,
         document_number,
         document_type,
-        success_url || clientInfo.config.success_url,
-        fail_url || clientInfo.config.fail_url,
+        platform,
+        success_url || null, // Optional: stored for reference
+        fail_url || null,    // Optional: stored for reference
+        webhook_url,         // Required: where we send the webhook
         JSON.stringify(metadata),
       ]
     );
@@ -248,6 +282,7 @@ export async function POST(request: NextRequest) {
           documentNumber: document_number,
           documentType: document_type,
           sessionId: session.id,
+          platform: platform,
         },
         backendUrl,
         coreUrl
