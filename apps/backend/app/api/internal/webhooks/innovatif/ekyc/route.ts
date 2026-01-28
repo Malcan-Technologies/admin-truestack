@@ -4,6 +4,10 @@ import { decryptResponse, verifyWebhookSignature } from "@truestack/shared/innov
 import { uploadKycDocument } from "@truestack/shared/s3";
 import crypto from "crypto";
 
+// Innovatif prepends the package name to ref_id in webhooks
+// We need to strip it to find the original session
+const INNOVATIF_PACKAGE_NAME = process.env.INNOVATIF_PACKAGE_NAME || "";
+
 interface InnovatifWebhookPayload {
   ref_id: string;
   onboarding_id: string;
@@ -56,15 +60,23 @@ export async function POST(request: NextRequest) {
       payload = body;
     }
 
-    const { ref_id, onboarding_id, status, result, reject_message, request_time, signature } = payload;
+    const { ref_id: raw_ref_id, onboarding_id, status, result, reject_message, request_time, signature } = payload;
 
     // Validate required fields
-    if (!ref_id || !onboarding_id) {
+    if (!raw_ref_id || !onboarding_id) {
       console.error("Missing ref_id or onboarding_id in webhook");
       return NextResponse.json(
         { error: "Missing required fields" },
         { status: 400 }
       );
+    }
+
+    // Innovatif prepends the package name to ref_id in webhook responses
+    // Strip it to get the original ref_id we stored in the session
+    let ref_id = raw_ref_id;
+    if (INNOVATIF_PACKAGE_NAME && raw_ref_id.startsWith(INNOVATIF_PACKAGE_NAME)) {
+      ref_id = raw_ref_id.substring(INNOVATIF_PACKAGE_NAME.length);
+      console.log(`Stripped package name prefix from ref_id: ${raw_ref_id} -> ${ref_id}`);
     }
 
     // Verify signature if provided
