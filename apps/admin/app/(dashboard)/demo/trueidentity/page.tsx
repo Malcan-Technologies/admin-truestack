@@ -145,6 +145,9 @@ export default function TrueIdentityDemoPage() {
   const [loading, setLoading] = useState(true);
   const [demoData, setDemoData] = useState<DemoSetupData | null>(null);
   const [showApiKey, setShowApiKey] = useState(false);
+  
+  // Tab state - controlled to prevent reset on re-render
+  const [activeTab, setActiveTab] = useState("create");
 
   // KYC Form state
   const [documentName, setDocumentName] = useState("JOHN DOE BIN AHMAD");
@@ -230,7 +233,7 @@ export default function TrueIdentityDemoPage() {
     }
   }, [currentSession]);
 
-  const fetchDemoSetup = useCallback(async () => {
+  const fetchDemoSetup = useCallback(async (autoLoadSession = false) => {
     try {
       setLoading(true);
       const data = await apiClient<DemoSetupData>("/api/admin/demo/setup");
@@ -239,8 +242,8 @@ export default function TrueIdentityDemoPage() {
         toast.success("Demo client created successfully!");
       }
       
-      // If no current session but there are recent pending/processing sessions, load the most recent
-      if (!currentSession && data.recentSessions?.length > 0) {
+      // Only auto-load pending session on initial load
+      if (autoLoadSession && data.recentSessions?.length > 0) {
         const pendingSession = data.recentSessions.find(
           (s) => s.status === "pending" || s.status === "processing"
         );
@@ -259,11 +262,13 @@ export default function TrueIdentityDemoPage() {
     } finally {
       setLoading(false);
     }
-  }, [currentSession]);
+  }, []);
 
+  // Initial fetch on mount - auto-load pending session if no current session
   useEffect(() => {
-    fetchDemoSetup();
-  }, [fetchDemoSetup]);
+    fetchDemoSetup(!currentSession);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Only run once on mount
 
   const copyApiKey = async () => {
     if (demoData?.apiKey?.key) {
@@ -800,7 +805,7 @@ export default function TrueIdentityDemoPage() {
       </div>
 
       {/* Main Demo Section */}
-      <Tabs defaultValue="create" className="space-y-6">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
         <TabsList className="border-slate-800 bg-slate-900">
           <TabsTrigger
             value="create"

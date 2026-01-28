@@ -235,14 +235,83 @@ export async function POST(
       );
     }
 
-    // If session is already completed, return current status without calling Innovatif
+    // If session is already completed/expired, return stored data without calling Innovatif again
     if (session.status === "completed" || session.status === "expired") {
+      // Get the full session data from database
+      const fullSession = await queryOne<{
+        reject_message: string | null;
+        innovatif_response: Record<string, unknown> | null;
+        s3_front_document: string | null;
+        s3_back_document: string | null;
+        s3_face_image: string | null;
+        s3_best_frame: string | null;
+      }>(
+        `SELECT reject_message, innovatif_response, s3_front_document, s3_back_document, s3_face_image, s3_best_frame
+         FROM kyc_session WHERE id = $1`,
+        [id]
+      );
+
+      // Generate pre-signed URLs for images
+      const presignedImages = await getPresignedUrls({
+        front_document: fullSession?.s3_front_document || null,
+        back_document: fullSession?.s3_back_document || null,
+        face_image: fullSession?.s3_face_image || null,
+        best_frame: fullSession?.s3_best_frame || null,
+      });
+
+      // Parse stored innovatif_response if available
+      const storedResponse = fullSession?.innovatif_response;
+      const step1 = storedResponse?.step1 as Record<string, unknown> | undefined;
+      const step2 = storedResponse?.step2 as Record<string, unknown> | undefined;
+      
+      // Extract OCR and verification data from step1
+      const ocrResult = step1?.ocr_result as Record<string, unknown> | undefined;
+      const textSimilarity = step1?.text_similarity_result as Record<string, unknown> | undefined;
+      const landmarkStatus = step1?.landmark_status as Record<string, unknown> | undefined;
+      
       return NextResponse.json({
         id: session.id,
+        ref_id: session.ref_id,
         status: session.status,
         result: session.result,
+        reject_message: fullSession?.reject_message || null,
         message: "Session already finalized",
         refreshed: false,
+        
+        // Document data from OCR (step1) or stored response
+        document: ocrResult ? {
+          full_name: ocrResult.full_name,
+          id_number: ocrResult.front_document_number,
+          id_number_back: ocrResult.back_document_number,
+          address: ocrResult.front_document_address,
+          gender: ocrResult.front_document_gender,
+        } : storedResponse ? {
+          full_name: storedResponse.name,
+          id_number: storedResponse.id_number,
+          address: storedResponse.address,
+          gender: storedResponse.gender,
+        } : null,
+        
+        // Verification results
+        verification: step1 || step2 ? {
+          // Document verification (Step 1)
+          document_valid: step1?.status ?? false,
+          name_match: textSimilarity?.name_similarity_status ? true : false,
+          id_match: textSimilarity?.document_number_similarity_status ? true : false,
+          front_back_match: textSimilarity?.front_back_number_similarity_status ? true : false,
+          landmark_valid: landmarkStatus?.landmark_is_valid ?? false,
+          
+          // Facial verification (Step 2)
+          face_match: step2?.is_identical ?? false,
+          face_match_score: step2?.percentage ?? null,
+          liveness_passed: step2?.status ?? false,
+        } : null,
+        
+        // Images (pre-signed URLs)
+        images: presignedImages,
+        
+        // Raw stored data
+        _raw: storedResponse,
       });
     }
 

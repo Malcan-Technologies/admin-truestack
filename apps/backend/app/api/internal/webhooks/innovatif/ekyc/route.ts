@@ -34,6 +34,10 @@ interface InnovatifWebhookPayload {
   back_document?: string;
   face_image?: string;
   best_frame?: string;
+  // Detailed verification data (callback_mode: 2)
+  step1?: Record<string, unknown>;
+  step2?: Record<string, unknown>;
+  mode?: number;
 }
 
 // POST /api/internal/webhooks/innovatif/ekyc
@@ -144,9 +148,11 @@ export async function POST(request: NextRequest) {
     }
 
     // Generate payload hash for idempotency
+    // Include request_time to differentiate between different webhook events for the same session
+    // Innovatif sends multiple webhooks with same status/result but different request_time
     const payloadHash = crypto
       .createHash("sha256")
-      .update(JSON.stringify({ ref_id, onboarding_id, status, result }))
+      .update(JSON.stringify({ ref_id, onboarding_id, status, result, request_time }))
       .digest("hex");
 
     // Check for duplicate webhook (idempotency)
@@ -291,7 +297,7 @@ export async function POST(request: NextRequest) {
 
       console.log(`Innovatif webhook: status=${status} (${statusNum}), result=${result} (${resultNum}) -> ourStatus=${ourStatus}, ourResult=${ourResult}`);
 
-      // Build Innovatif response object (without images)
+      // Build Innovatif response object (without images, but including step1/step2 for detailed data)
       const innovatifResponse: Record<string, unknown> = {
         status,
         result,
@@ -307,6 +313,10 @@ export async function POST(request: NextRequest) {
         dob: payload.dob,
         religion: payload.religion,
         race: payload.race,
+        // Include detailed verification data if present (callback_mode: 2)
+        step1: payload.step1,
+        step2: payload.step2,
+        mode: payload.mode,
       };
 
       // Upload images to S3 if present
@@ -517,8 +527,29 @@ async function triggerClientWebhook(sessionId: string) {
   }
 
   try {
+    // Determine event type based on session status
+    // - kyc.session.started: User opened the KYC flow (status: pending)
+    // - kyc.session.processing: User is completing the KYC (status: processing)
+    // - kyc.session.completed: KYC finished with result (status: completed)
+    // - kyc.session.expired: Session timed out (status: expired)
+    let eventType = "kyc.session.updated";
+    switch (session.status) {
+      case "pending":
+        eventType = "kyc.session.started";
+        break;
+      case "processing":
+        eventType = "kyc.session.processing";
+        break;
+      case "completed":
+        eventType = "kyc.session.completed";
+        break;
+      case "expired":
+        eventType = "kyc.session.expired";
+        break;
+    }
+    
     const webhookPayload = {
-      event: "kyc.session.completed",
+      event: eventType,
       session_id: session.id,
       ref_id: session.ref_id,
       status: session.status,
@@ -534,7 +565,7 @@ async function triggerClientWebhook(sessionId: string) {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "X-TrueStack-Event": "kyc.session.completed",
+        "X-TrueStack-Event": eventType,
       },
       body: JSON.stringify(webhookPayload),
     });
