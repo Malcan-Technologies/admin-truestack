@@ -25,7 +25,6 @@ export const auth = betterAuth({
   plugins: [
     admin({
       defaultRole: "ops",
-      adminRoles: ["super_admin"], // Only super_admin can manage users
     }),
   ],
 

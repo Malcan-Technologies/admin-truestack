@@ -2,9 +2,11 @@ interface PageHeaderProps {
   title: string;
   description?: string;
   children?: React.ReactNode;
+  actions?: React.ReactNode;
 }
 
-export function PageHeader({ title, description, children }: PageHeaderProps) {
+export function PageHeader({ title, description, children, actions }: PageHeaderProps) {
+  const actionContent = actions || children;
   return (
     <div className="mb-8 flex items-start justify-between">
       <div>
@@ -17,7 +19,7 @@ export function PageHeader({ title, description, children }: PageHeaderProps) {
           <p className="mt-2 text-slate-400">{description}</p>
         )}
       </div>
-      {children && <div className="flex items-center gap-3">{children}</div>}
+      {actionContent && <div className="flex items-center gap-3">{actionContent}</div>}
     </div>
   );
 }

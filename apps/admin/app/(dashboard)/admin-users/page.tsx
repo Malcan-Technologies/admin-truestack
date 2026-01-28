@@ -40,17 +40,21 @@ import {
   Shield,
   ShieldCheck,
   User,
+  Pencil,
 } from "lucide-react";
 import { authClient, useSession } from "@/lib/auth-client";
 
 // Admin roles available in the system
 const ADMIN_ROLES = [
-  { value: "super_admin", label: "Super Admin", description: "Full access to all features" },
+  { value: "admin", label: "Admin", description: "Full access to all features including user management" },
   { value: "ops", label: "Operations", description: "Manage clients and KYC sessions" },
   { value: "finance", label: "Finance", description: "View reports and manage credits" },
 ] as const;
 
-type AdminRole = (typeof ADMIN_ROLES)[number]["value"];
+type AdminRole = (typeof ADMIN_ROLES)[number]["value"] | "super_admin";
+
+// Roles that have admin privileges (can manage other users)
+const PRIVILEGED_ROLES = ["admin", "super_admin"];
 
 interface AdminUser {
   id: string;
@@ -58,7 +62,7 @@ interface AdminUser {
   email: string;
   role: AdminRole;
   createdAt: string;
-  banned?: boolean;
+  banned?: boolean | null;
 }
 
 // Generate a secure random password
@@ -88,8 +92,9 @@ function generateSecurePassword(length: number = 16): string {
     .join("");
 }
 
-function getRoleIcon(role: AdminRole) {
+function getRoleIcon(role: AdminRole | string) {
   switch (role) {
+    case "admin":
     case "super_admin":
       return ShieldCheck;
     case "ops":
@@ -101,8 +106,9 @@ function getRoleIcon(role: AdminRole) {
   }
 }
 
-function getRoleBadgeStyle(role: AdminRole) {
+function getRoleBadgeStyle(role: AdminRole | string) {
   switch (role) {
+    case "admin":
     case "super_admin":
       return "border-red-500/30 bg-red-500/10 text-red-400";
     case "ops":
@@ -114,15 +120,23 @@ function getRoleBadgeStyle(role: AdminRole) {
   }
 }
 
+function getRoleLabel(role: string): string {
+  if (role === "super_admin") return "Super Admin";
+  const found = ADMIN_ROLES.find((r) => r.value === role);
+  return found?.label || role;
+}
+
 export default function AdminUsersPage() {
   const { data: session } = useSession();
   const currentUser = session?.user;
-  const isSuperAdmin = (currentUser as { role?: string })?.role === "super_admin";
+  const userRole = (currentUser as { role?: string })?.role || "";
+  const isAdmin = PRIVILEGED_ROLES.includes(userRole);
 
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [editingUser, setEditingUser] = useState<AdminUser | null>(null);
 
   const fetchUsers = useCallback(async () => {
     try {
@@ -158,12 +172,12 @@ export default function AdminUsersPage() {
   }, []);
 
   useEffect(() => {
-    if (isSuperAdmin) {
+    if (isAdmin) {
       fetchUsers();
     }
-  }, [isSuperAdmin, fetchUsers]);
+  }, [isAdmin, fetchUsers]);
 
-  if (!isSuperAdmin) {
+  if (!isAdmin) {
     return (
       <div>
         <PageHeader
@@ -174,7 +188,7 @@ export default function AdminUsersPage() {
           <CardContent className="flex flex-col items-center justify-center py-12">
             <Shield className="h-12 w-12 text-slate-600" />
             <p className="mt-4 text-slate-400">
-              Only Super Admins can manage admin users.
+              Only users with the Admin role can manage admin users.
             </p>
           </CardContent>
         </Card>
@@ -190,7 +204,7 @@ export default function AdminUsersPage() {
         actions={
           <Dialog open={isCreateModalOpen} onOpenChange={setIsCreateModalOpen}>
             <DialogTrigger asChild>
-              <Button className="bg-indigo-600 hover:bg-indigo-700">
+              <Button className="bg-gradient-to-r from-indigo-500 to-violet-500 text-white hover:from-indigo-600 hover:to-violet-600">
                 <Plus className="mr-2 h-4 w-4" />
                 Add Admin User
               </Button>
@@ -241,11 +255,15 @@ export default function AdminUsersPage() {
                   <TableHead className="text-slate-400">Role</TableHead>
                   <TableHead className="text-slate-400">Status</TableHead>
                   <TableHead className="text-slate-400">Created</TableHead>
+                  <TableHead className="text-slate-400">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {users.map((user) => {
                   const RoleIcon = getRoleIcon(user.role);
+                  const isSelf = user.id === currentUser?.id;
+                  const isSuperAdmin = user.role === "super_admin";
+                  const canEdit = !isSelf && !isSuperAdmin;
                   return (
                     <TableRow
                       key={user.id}
@@ -253,7 +271,7 @@ export default function AdminUsersPage() {
                     >
                       <TableCell className="font-medium text-white">
                         {user.name}
-                        {user.id === currentUser?.id && (
+                        {isSelf && (
                           <Badge
                             variant="outline"
                             className="ml-2 border-indigo-500/30 bg-indigo-500/10 text-indigo-400"
@@ -271,8 +289,7 @@ export default function AdminUsersPage() {
                           className={getRoleBadgeStyle(user.role)}
                         >
                           <RoleIcon className="mr-1 h-3 w-3" />
-                          {ADMIN_ROLES.find((r) => r.value === user.role)?.label ||
-                            user.role}
+                          {getRoleLabel(user.role)}
                         </Badge>
                       </TableCell>
                       <TableCell>
@@ -295,6 +312,20 @@ export default function AdminUsersPage() {
                       <TableCell className="text-slate-400">
                         {new Date(user.createdAt).toLocaleDateString()}
                       </TableCell>
+                      <TableCell>
+                        {canEdit ? (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setEditingUser(user)}
+                            className="text-slate-400 hover:text-white"
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                        ) : (
+                          <span className="text-xs text-slate-500">—</span>
+                        )}
+                      </TableCell>
                     </TableRow>
                   );
                 })}
@@ -303,6 +334,20 @@ export default function AdminUsersPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* Edit User Modal */}
+      <Dialog open={!!editingUser} onOpenChange={(open) => !open && setEditingUser(null)}>
+        {editingUser && (
+          <EditUserModal
+            user={editingUser}
+            onSuccess={() => {
+              setEditingUser(null);
+              fetchUsers();
+            }}
+            onClose={() => setEditingUser(null)}
+          />
+        )}
+      </Dialog>
     </div>
   );
 }
@@ -339,11 +384,12 @@ function CreateAdminUserModal({ onSuccess, onClose }: CreateAdminUserModalProps)
     setError(null);
 
     try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const result = await authClient.admin.createUser({
         name,
         email,
         password,
-        role,
+        role: role as any,
       });
 
       if (result.error) {
@@ -473,16 +519,16 @@ function CreateAdminUserModal({ onSuccess, onClose }: CreateAdminUserModalProps)
             <SelectTrigger className="border-slate-700 bg-slate-800/50 text-white">
               <SelectValue />
             </SelectTrigger>
-            <SelectContent className="border-slate-700 bg-slate-900">
+            <SelectContent className="border-slate-700 bg-slate-900 min-w-[350px]">
               {ADMIN_ROLES.map((r) => (
                 <SelectItem
                   key={r.value}
                   value={r.value}
-                  className="text-white focus:bg-slate-800 focus:text-white"
+                  className="text-white focus:bg-slate-800 focus:text-white py-3 [&>span]:items-start"
                 >
-                  <div className="flex flex-col">
-                    <span>{r.label}</span>
-                    <span className="text-xs text-slate-400">
+                  <div className="flex flex-col gap-0.5 py-1">
+                    <span className="font-medium">{r.label}</span>
+                    <span className="text-xs text-slate-400 leading-relaxed">
                       {r.description}
                     </span>
                   </div>
@@ -534,7 +580,7 @@ function CreateAdminUserModal({ onSuccess, onClose }: CreateAdminUserModalProps)
           <Button
             type="submit"
             disabled={loading || !name || !email || !password}
-            className="bg-indigo-600 hover:bg-indigo-700"
+            className="bg-gradient-to-r from-indigo-500 to-violet-500 text-white hover:from-indigo-600 hover:to-violet-600 disabled:from-slate-700 disabled:to-slate-700 disabled:text-slate-400 disabled:opacity-100"
           >
             {loading ? (
               <>
@@ -545,6 +591,148 @@ function CreateAdminUserModal({ onSuccess, onClose }: CreateAdminUserModalProps)
               <>
                 <UserPlus className="mr-2 h-4 w-4" />
                 Create User
+              </>
+            )}
+          </Button>
+        </div>
+      </form>
+    </DialogContent>
+  );
+}
+
+interface EditUserModalProps {
+  user: AdminUser;
+  onSuccess: () => void;
+  onClose: () => void;
+}
+
+function EditUserModal({ user, onSuccess, onClose }: EditUserModalProps) {
+  const [name, setName] = useState(user.name);
+  const [role, setRole] = useState<AdminRole>(user.role);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const hasChanges = name !== user.name || role !== user.role;
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setError(null);
+
+    try {
+      // Update name if changed
+      if (name !== user.name) {
+        const nameResult = await authClient.admin.updateUser({
+          userId: user.id,
+          data: { name },
+        });
+
+        if (nameResult.error) {
+          throw new Error(nameResult.error.message || "Failed to update name");
+        }
+      }
+
+      // Update role if changed
+      if (role !== user.role) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const roleResult = await authClient.admin.setRole({
+          userId: user.id,
+          role: role as any,
+        });
+
+        if (roleResult.error) {
+          throw new Error(roleResult.error.message || "Failed to update role");
+        }
+      }
+
+      onSuccess();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to update user");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <DialogContent className="border-slate-800 bg-slate-900 sm:max-w-[450px]">
+      <DialogHeader>
+        <DialogTitle className="text-white">Edit User</DialogTitle>
+        <DialogDescription className="text-slate-400">
+          Update details for {user.email}.
+        </DialogDescription>
+      </DialogHeader>
+
+      <form onSubmit={handleSubmit} className="space-y-4 py-4">
+        {error && (
+          <div className="rounded-lg border border-red-500/30 bg-red-500/10 p-3">
+            <p className="text-sm text-red-400">{error}</p>
+          </div>
+        )}
+
+        <div className="space-y-2">
+          <Label htmlFor="edit-name" className="text-slate-300">
+            Name
+          </Label>
+          <Input
+            id="edit-name"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="User name"
+            required
+            className="border-slate-700 bg-slate-800/50 text-white placeholder:text-slate-500"
+          />
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="edit-role" className="text-slate-300">
+            Role
+          </Label>
+          <Select value={role} onValueChange={(v) => setRole(v as AdminRole)}>
+            <SelectTrigger className="border-slate-700 bg-slate-800/50 text-white">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent className="border-slate-700 bg-slate-900 min-w-[350px]">
+              {ADMIN_ROLES.map((r) => (
+                <SelectItem
+                  key={r.value}
+                  value={r.value}
+                  className="text-white focus:bg-slate-800 focus:text-white py-3 [&>span]:items-start"
+                >
+                  <div className="flex flex-col gap-0.5 py-1">
+                    <span className="font-medium">{r.label}</span>
+                    <span className="text-xs text-slate-400 leading-relaxed">
+                      {r.description}
+                    </span>
+                  </div>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="flex justify-end gap-3 pt-4">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={onClose}
+            className="border-slate-700"
+          >
+            Cancel
+          </Button>
+          <Button
+            type="submit"
+            disabled={loading || !hasChanges || !name.trim()}
+            className="bg-gradient-to-r from-indigo-500 to-violet-500 text-white hover:from-indigo-600 hover:to-violet-600 disabled:from-slate-700 disabled:to-slate-700 disabled:text-slate-400 disabled:opacity-100"
+          >
+            {loading ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Saving...
+              </>
+            ) : (
+              <>
+                <Check className="mr-2 h-4 w-4" />
+                Save Changes
               </>
             )}
           </Button>

@@ -21,6 +21,9 @@ model User {
   emailVerified Boolean   @default(false) @map("email_verified")
   image         String?
   role          String    @default("ops") // super_admin, ops, finance
+  banned        Boolean   @default(false)
+  banReason     String?   @map("ban_reason")
+  banExpires    DateTime? @map("ban_expires")
   createdAt     DateTime  @default(now()) @map("created_at")
   updatedAt     DateTime  @default(now()) @updatedAt @map("updated_at")
 
