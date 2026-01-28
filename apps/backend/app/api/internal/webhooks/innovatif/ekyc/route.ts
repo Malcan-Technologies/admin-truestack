@@ -108,8 +108,9 @@ export async function POST(request: NextRequest) {
       id: string;
       client_id: string;
       status: string;
+      billed: boolean;
     }>(
-      `SELECT id, client_id, status FROM kyc_session WHERE ref_id = $1`,
+      `SELECT id, client_id, status, COALESCE(billed, false) as billed FROM kyc_session WHERE ref_id = $1`,
       [ref_id]
     );
 
@@ -204,7 +205,10 @@ export async function POST(request: NextRequest) {
       // Wait for all uploads
       await Promise.all(uploadPromises);
 
-      // Update session
+      // Determine if this is a billable completion (completed or expired/failed, not already billed)
+      const isBillable = (ourStatus === "completed" || ourStatus === "expired") && !session.billed;
+
+      // Update session (include billed flag if billable)
       await txClient.query(
         `UPDATE kyc_session 
          SET status = $1,
@@ -215,7 +219,8 @@ export async function POST(request: NextRequest) {
              s3_back_document = COALESCE($6, s3_back_document),
              s3_face_image = COALESCE($7, s3_face_image),
              s3_best_frame = COALESCE($8, s3_best_frame),
-             innovatif_onboarding_id = COALESCE($9, innovatif_onboarding_id)
+             innovatif_onboarding_id = COALESCE($9, innovatif_onboarding_id),
+             billed = CASE WHEN $11 THEN true ELSE billed END
          WHERE id = $10`,
         [
           ourStatus,
@@ -228,8 +233,80 @@ export async function POST(request: NextRequest) {
           s3BestFrame,
           onboarding_id,
           session.id,
+          isBillable,
         ]
       );
+
+      // Deduct credit if this is a billable completion
+      if (isBillable) {
+        // Use advisory lock to prevent race conditions
+        await txClient.query(
+          `SELECT pg_advisory_xact_lock(hashtext($1))`,
+          [`credit_${session.client_id}_true_identity`]
+        );
+
+        // Get current month's completed session count for this client (for tiered pricing)
+        const usageResult = await txClient.query<{ count: string }>(
+          `SELECT COUNT(*) as count 
+           FROM kyc_session 
+           WHERE client_id = $1 
+             AND billed = true
+             AND created_at >= date_trunc('month', CURRENT_DATE)
+             AND created_at < date_trunc('month', CURRENT_DATE) + INTERVAL '1 month'`,
+          [session.client_id]
+        );
+        const currentMonthUsage = parseInt(usageResult.rows[0]?.count || "0");
+
+        // Get the applicable pricing tier based on current usage
+        // Find the tier where current usage falls within min_volume and max_volume
+        const tierResult = await txClient.query<{ price_per_unit: string; tier_name: string }>(
+          `SELECT price_per_unit, tier_name
+           FROM pricing_tier
+           WHERE client_id = $1 
+             AND product_id = 'true_identity'
+             AND min_volume <= $2
+             AND (max_volume IS NULL OR max_volume >= $2)
+           ORDER BY min_volume DESC
+           LIMIT 1`,
+          [session.client_id, currentMonthUsage + 1] // +1 because this session counts
+        );
+
+        // Default to 1 credit if no pricing tier is configured
+        let pricePerUnit = 1;
+        let tierName = "default";
+        
+        if (tierResult.rows[0]) {
+          pricePerUnit = parseFloat(tierResult.rows[0].price_per_unit);
+          tierName = tierResult.rows[0].tier_name;
+        }
+
+        // Get current balance
+        const balanceResult = await txClient.query<{ balance: string }>(
+          `SELECT COALESCE(SUM(amount), 0) as balance 
+           FROM credit_ledger 
+           WHERE client_id = $1 AND product_id = 'true_identity'`,
+          [session.client_id]
+        );
+
+        const currentBalance = parseFloat(balanceResult.rows[0]?.balance || "0");
+        const newBalance = currentBalance - pricePerUnit;
+
+        // Deduct credit based on pricing tier
+        await txClient.query(
+          `INSERT INTO credit_ledger 
+            (client_id, product_id, amount, balance_after, type, reference_id, description)
+           VALUES ($1, 'true_identity', $2, $3, 'usage', $4, $5)`,
+          [
+            session.client_id,
+            -pricePerUnit, // Negative amount for deduction
+            newBalance,
+            session.id,
+            `KYC session ${ourResult === "approved" ? "approved" : "rejected"} (${tierName}: ${pricePerUnit} credits)`,
+          ]
+        );
+
+        console.log(`Billed session ${session.id}: status=${ourStatus}, result=${ourResult}, tier=${tierName}, price=${pricePerUnit}, new_balance=${newBalance}`);
+      }
     });
 
     // Trigger client webhook delivery (async, don't wait)

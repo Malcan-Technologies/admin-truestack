@@ -1,14 +1,23 @@
 import { NextRequest, NextResponse } from "next/server";
 
-// Allowed origins for CORS (admin app)
+// Allowed origins for CORS
 const allowedOrigins = [
+  // Local development
+  "http://localhost:3000", // Core app local dev
+  "http://localhost:3001", // Backend local dev (self)
   "http://localhost:3002", // Admin app local dev
-  "https://admin.truestack.my", // Admin app in production
-  "https://core.truestack.my", // Core app in production
-  process.env.ADMIN_APP_URL, // Additional admin app URL if configured
+  // Production domains
+  "https://api.truestack.my", // Backend API
+  "https://admin.truestack.my", // Admin app
+  "https://core.truestack.my", // Core app
+  "https://truestack.my", // Main website
+  "https://www.truestack.my", // Main website with www
+  // Environment-configured URLs
+  process.env.ADMIN_APP_URL,
+  process.env.CORE_APP_URL,
 ].filter(Boolean) as string[];
 
-// Next.js 16 proxy - handles CORS for cross-origin auth requests
+// Next.js 16 proxy - handles CORS for cross-origin API requests
 export function proxy(request: NextRequest) {
   const origin = request.headers.get("origin");
   const isAllowedOrigin = origin && allowedOrigins.includes(origin);
@@ -20,12 +29,13 @@ export function proxy(request: NextRequest) {
     if (isAllowedOrigin) {
       response.headers.set("Access-Control-Allow-Origin", origin);
     }
-    response.headers.set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+    response.headers.set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS");
     response.headers.set(
       "Access-Control-Allow-Headers",
       "Content-Type, Authorization, X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Date, X-Api-Version"
     );
     response.headers.set("Access-Control-Allow-Credentials", "true");
+    response.headers.set("Access-Control-Max-Age", "86400"); // Cache preflight for 24 hours
     
     return response;
   }
@@ -43,7 +53,7 @@ export function proxy(request: NextRequest) {
 
 export const config = {
   matcher: [
-    "/api/auth/:path*",
-    "/api/admin/:path*",
+    // All API routes
+    "/api/:path*",
   ],
 };

@@ -47,21 +47,46 @@ function DialogOverlay({
   )
 }
 
+// Using pixel values directly since Tailwind v4 JIT doesn't detect dynamic class names
+const dialogSizeValues = {
+  default: 512,   // lg: 32rem = 512px
+  sm: 384,        // sm: 24rem = 384px
+  md: 448,        // md: 28rem = 448px
+  lg: 512,        // lg: 32rem = 512px
+  xl: 576,        // xl: 36rem = 576px
+  "2xl": 672,     // 2xl: 42rem = 672px
+  "3xl": 768,     // 3xl: 48rem = 768px
+  "4xl": 896,     // 4xl: 56rem = 896px
+  "5xl": 1024,    // 5xl: 64rem = 1024px
+  "6xl": 1152,    // 6xl: 72rem = 1152px
+  "7xl": 1280,    // 7xl: 80rem = 1280px
+  full: -1,       // Special case: calc(100vw - 4rem)
+} as const
+
+type DialogSize = keyof typeof dialogSizeValues
+
 function DialogContent({
   className,
   children,
   showCloseButton = true,
+  size = "default",
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Content> & {
   showCloseButton?: boolean
+  size?: DialogSize
 }) {
+  const maxWidthStyle = dialogSizeValues[size] === -1 
+    ? { maxWidth: "calc(100vw - 4rem)" }
+    : { maxWidth: dialogSizeValues[size] }
+
   return (
     <DialogPortal data-slot="dialog-portal">
       <DialogOverlay />
       <DialogPrimitive.Content
         data-slot="dialog-content"
+        style={maxWidthStyle}
         className={cn(
-          "bg-background data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 fixed top-[50%] left-[50%] z-50 grid w-full max-w-[calc(100%-2rem)] translate-x-[-50%] translate-y-[-50%] gap-4 rounded-lg border p-6 shadow-lg duration-200 outline-none sm:max-w-lg",
+          "bg-background data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 fixed top-[50%] left-[50%] z-50 grid w-full translate-x-[-50%] translate-y-[-50%] gap-4 rounded-lg border p-6 shadow-lg duration-200 outline-none",
           className
         )}
         {...props}

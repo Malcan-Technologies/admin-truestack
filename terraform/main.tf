@@ -114,6 +114,7 @@ module "ecs" {
   
   # Environment variables
   better_auth_url             = "https://api.${var.domain_name}"
+  core_app_url                = "https://core.${var.domain_name}"
   s3_kyc_bucket               = module.s3.bucket_name
   secrets_arn                 = data.aws_secretsmanager_secret.app.arn
   

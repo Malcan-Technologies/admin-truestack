@@ -108,7 +108,11 @@ export function ClientsList({ clients }: ClientsListProps) {
                     {Number(client.sessions_count || 0).toLocaleString()}
                   </TableCell>
                   <TableCell className="text-slate-400">
-                    {new Date(client.created_at).toLocaleDateString()}
+                    {new Date(client.created_at).toLocaleDateString("en-US", {
+                      year: "numeric",
+                      month: "short",
+                      day: "numeric",
+                    })}
                   </TableCell>
                 </TableRow>
               ))}

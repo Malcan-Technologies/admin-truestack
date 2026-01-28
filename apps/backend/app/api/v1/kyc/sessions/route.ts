@@ -73,53 +73,74 @@ async function validateApiKeyAndGetClient(apiKey: string) {
   };
 }
 
-// Helper to check and deduct credits
-async function checkAndDeductCredit(
+// Helper to check if client has sufficient credits (no deduction - billing happens on completion)
+async function checkCredits(
   clientId: string,
   productId: string,
-  allowOverdraft: boolean,
-  referenceId: string
-): Promise<{ success: boolean; balance: number; error?: string }> {
-  return withTransaction(async (txClient) => {
-    // Get current balance with row lock
-    const balanceResult = await txClient.query<{ balance: string }>(
-      `SELECT COALESCE(SUM(amount), 0) as balance 
-       FROM credit_ledger 
-       WHERE client_id = $1 AND product_id = $2
-       FOR UPDATE`,
-      [clientId, productId]
-    );
+  allowOverdraft: boolean
+): Promise<{ success: boolean; balance: number; minPrice: number; error?: string }> {
+  // Get current balance
+  const balanceResult = await queryOne<{ balance: string }>(
+    `SELECT COALESCE(SUM(amount), 0) as balance 
+     FROM credit_ledger 
+     WHERE client_id = $1 AND product_id = $2`,
+    [clientId, productId]
+  );
 
-    const currentBalance = parseInt(balanceResult.rows[0]?.balance || "0");
+  const currentBalance = parseFloat(balanceResult?.balance || "0");
 
-    // Check if sufficient credits (unless overdraft allowed)
-    if (currentBalance < 1 && !allowOverdraft) {
-      return {
-        success: false,
-        balance: currentBalance,
-        error: "Insufficient credits",
-      };
-    }
+  // Get current month's usage to determine applicable tier
+  const usageResult = await queryOne<{ count: string }>(
+    `SELECT COUNT(*) as count 
+     FROM kyc_session 
+     WHERE client_id = $1 
+       AND billed = true
+       AND created_at >= date_trunc('month', CURRENT_DATE)
+       AND created_at < date_trunc('month', CURRENT_DATE) + INTERVAL '1 month'`,
+    [clientId]
+  );
+  const currentMonthUsage = parseInt(usageResult?.count || "0");
 
-    const newBalance = currentBalance - 1;
+  // Get the applicable pricing tier based on current usage
+  const tierResult = await queryOne<{ price_per_unit: string }>(
+    `SELECT price_per_unit
+     FROM pricing_tier
+     WHERE client_id = $1 
+       AND product_id = $2
+       AND min_volume <= $3
+       AND (max_volume IS NULL OR max_volume >= $3)
+     ORDER BY min_volume DESC
+     LIMIT 1`,
+    [clientId, productId, currentMonthUsage + 1]
+  );
 
-    // Deduct credit
-    await txClient.query(
-      `INSERT INTO credit_ledger 
-        (client_id, product_id, amount, balance_after, type, reference_id, description)
-       VALUES ($1, $2, -1, $3, 'usage', $4, 'KYC session creation')`,
-      [clientId, productId, newBalance, referenceId]
-    );
+  // Default to 1 credit if no pricing tier is configured
+  const minPrice = tierResult ? parseFloat(tierResult.price_per_unit) : 1;
 
-    return { success: true, balance: newBalance };
-  });
+  // Check if sufficient credits (unless overdraft allowed)
+  if (currentBalance < minPrice && !allowOverdraft) {
+    return {
+      success: false,
+      balance: currentBalance,
+      minPrice,
+      error: `Insufficient credits. Need ${minPrice} credits, have ${currentBalance}`,
+    };
+  }
+
+  return { success: true, balance: currentBalance, minPrice };
 }
 
-// Generate unique ref_id for Innovatif
+// Generate unique ref_id for Innovatif (max 32 characters)
 function generateRefId(clientCode: string): string {
-  const timestamp = Date.now();
-  const random = crypto.randomBytes(6).toString("hex");
-  return `${clientCode}_${timestamp}_${random}`;
+  // Use base36 timestamp (shorter) + random hex
+  // Format: {shortCode}_{base36timestamp}_{random} = max 32 chars
+  const shortCode = clientCode.substring(0, 8); // Max 8 chars from client code
+  const timestamp = Date.now().toString(36); // Base36 = ~8 chars
+  const random = crypto.randomBytes(4).toString("hex"); // 8 chars
+  const refId = `${shortCode}_${timestamp}_${random}`;
+  
+  // Ensure max 32 characters
+  return refId.substring(0, 32);
 }
 
 // POST /v1/kyc/sessions - Create a new KYC session
@@ -193,12 +214,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Check and deduct credits
-    const creditResult = await checkAndDeductCredit(
+    // Check credits (no deduction yet - billing happens on completion via webhook)
+    const creditResult = await checkCredits(
       clientInfo.clientId,
       clientInfo.productId,
-      clientInfo.config.allow_overdraft,
-      session.id
+      clientInfo.config.allow_overdraft
     );
 
     if (!creditResult.success) {
@@ -215,8 +235,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Get backend URL for callbacks
+    // Get backend URL for callbacks and core URL for user-facing redirects
     const backendUrl = process.env.BETTER_AUTH_URL || "http://localhost:3001";
+    const coreUrl = process.env.CORE_APP_URL || "http://localhost:3000";
 
     // Call Innovatif to create transaction
     try {
@@ -228,7 +249,8 @@ export async function POST(request: NextRequest) {
           documentType: document_type,
           sessionId: session.id,
         },
-        backendUrl
+        backendUrl,
+        coreUrl
       );
 
       // Update session with Innovatif response
@@ -251,8 +273,8 @@ export async function POST(request: NextRequest) {
     } catch (innovatifError) {
       console.error("Innovatif API error:", innovatifError);
       
-      // Update session to failed status but keep the credit deducted
-      // (failures are billable per requirements)
+      // Update session to failed status - no billing since session never started
+      // (billing only happens on completed sessions via webhook)
       await query(
         `UPDATE kyc_session SET status = 'expired', result = 'rejected', reject_message = $1 WHERE id = $2`,
         [innovatifError instanceof Error ? innovatifError.message : "Innovatif API error", session.id]

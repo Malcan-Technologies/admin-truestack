@@ -45,6 +45,11 @@ variable "better_auth_url" {
   type = string
 }
 
+variable "core_app_url" {
+  type        = string
+  description = "URL for the Core app (user-facing redirects)"
+}
+
 variable "s3_kyc_bucket" {
   type = string
 }
@@ -224,6 +229,7 @@ resource "aws_ecs_task_definition" "backend" {
         { name = "PORT", value = "3000" },
         { name = "BETTER_AUTH_URL", value = var.better_auth_url },
         { name = "NEXT_PUBLIC_BETTER_AUTH_URL", value = var.better_auth_url },
+        { name = "CORE_APP_URL", value = var.core_app_url },
         { name = "S3_KYC_BUCKET", value = var.s3_kyc_bucket },
         { name = "AWS_REGION", value = "ap-southeast-5" },
         { name = "INNOVATIF_PACKAGE_NAME", value = var.innovatif_package_name },

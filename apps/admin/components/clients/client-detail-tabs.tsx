@@ -12,7 +12,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Key, CreditCard, FileCheck, Copy, Eye, EyeOff, Ban } from "lucide-react";
+import { Key, CreditCard, FileCheck, Copy, Eye, EyeOff, Ban, DollarSign, Plus, Trash2 } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -29,6 +29,8 @@ import { toast } from "sonner";
 import { GenerateApiKeyModal } from "./generate-api-key-modal";
 import { TopupCreditsModal } from "./topup-credits-modal";
 import { apiClient } from "@/lib/utils";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 
 type Client = {
   id: string;
@@ -69,6 +71,14 @@ type CreditEntry = {
   created_by_name: string | null;
 };
 
+type PricingTier = {
+  id?: string;
+  tier_name: string;
+  min_volume: number;
+  max_volume: number | null;
+  price_per_unit: string;
+};
+
 interface ClientDetailTabsProps {
   client: Client;
 }
@@ -80,6 +90,14 @@ export function ClientDetailTabs({ client }: ClientDetailTabsProps) {
   const [loadingKeys, setLoadingKeys] = useState(true);
   const [loadingCredits, setLoadingCredits] = useState(true);
   const [revealedKeys, setRevealedKeys] = useState<Set<string>>(new Set());
+  
+  // Pricing state
+  const [pricingTiers, setPricingTiers] = useState<PricingTier[]>([]);
+  const [loadingPricing, setLoadingPricing] = useState(true);
+  const [savingPricing, setSavingPricing] = useState(false);
+  const [currentMonthUsage, setCurrentMonthUsage] = useState(0);
+  const [allowOverdraft, setAllowOverdraft] = useState(false);
+  const [savingOverdraft, setSavingOverdraft] = useState(false);
 
   const toggleKeyVisibility = (keyId: string) => {
     setRevealedKeys((prev) => {
@@ -116,6 +134,69 @@ export function ClientDetailTabs({ client }: ClientDetailTabsProps) {
     setApiKeys(updatedKeys);
   };
 
+  const addPricingTier = () => {
+    const lastTier = pricingTiers[pricingTiers.length - 1];
+    const newMinVolume = lastTier ? (lastTier.max_volume || lastTier.min_volume) + 1 : 0;
+    setPricingTiers([
+      ...pricingTiers,
+      {
+        tier_name: `Tier ${pricingTiers.length + 1}`,
+        min_volume: newMinVolume,
+        max_volume: null,
+        price_per_unit: "5.00",
+      },
+    ]);
+  };
+
+  const removePricingTier = (index: number) => {
+    setPricingTiers(pricingTiers.filter((_, i) => i !== index));
+  };
+
+  const updatePricingTier = (index: number, field: keyof PricingTier, value: string | number | null) => {
+    const updated = [...pricingTiers];
+    updated[index] = { ...updated[index], [field]: value };
+    setPricingTiers(updated);
+  };
+
+  const savePricingTiers = async () => {
+    setSavingPricing(true);
+    try {
+      const tiersToSave = pricingTiers.map((tier) => ({
+        tierName: tier.tier_name,
+        minVolume: tier.min_volume,
+        maxVolume: tier.max_volume,
+        pricePerUnit: parseFloat(tier.price_per_unit),
+      }));
+
+      await apiClient(`/api/admin/clients/${client.id}/pricing`, {
+        method: "POST",
+        body: JSON.stringify({ tiers: tiersToSave }),
+      });
+
+      toast.success("Pricing tiers saved successfully");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to save pricing tiers");
+    } finally {
+      setSavingPricing(false);
+    }
+  };
+
+  const toggleAllowOverdraft = async (newValue: boolean) => {
+    setSavingOverdraft(true);
+    try {
+      await apiClient(`/api/admin/clients/${client.id}/config`, {
+        method: "PATCH",
+        body: JSON.stringify({ allow_overdraft: newValue }),
+      });
+      setAllowOverdraft(newValue);
+      toast.success(`Allow overdraft ${newValue ? "enabled" : "disabled"}`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to update setting");
+    } finally {
+      setSavingOverdraft(false);
+    }
+  };
+
   useEffect(() => {
     // Fetch API keys
     apiClient<ApiKey[]>(`/api/admin/clients/${client.id}/api-keys`)
@@ -133,6 +214,18 @@ export function ClientDetailTabs({ client }: ClientDetailTabsProps) {
       })
       .catch(console.error)
       .finally(() => setLoadingCredits(false));
+
+    // Fetch pricing tiers and config
+    apiClient<{ tiers: PricingTier[]; currentMonthUsage: number; allowOverdraft: boolean }>(
+      `/api/admin/clients/${client.id}/pricing`
+    )
+      .then((data) => {
+        setPricingTiers(data.tiers);
+        setCurrentMonthUsage(data.currentMonthUsage);
+        setAllowOverdraft(data.allowOverdraft ?? false);
+      })
+      .catch(console.error)
+      .finally(() => setLoadingPricing(false));
   }, [client.id]);
 
   return (
@@ -164,6 +257,13 @@ export function ClientDetailTabs({ client }: ClientDetailTabsProps) {
         >
           <CreditCard className="mr-2 h-4 w-4" />
           Billing
+        </TabsTrigger>
+        <TabsTrigger
+          value="pricing"
+          className="data-[state=active]:bg-indigo-500/20 data-[state=active]:text-indigo-400"
+        >
+          <DollarSign className="mr-2 h-4 w-4" />
+          Pricing
         </TabsTrigger>
       </TabsList>
 
@@ -486,6 +586,174 @@ export function ClientDetailTabs({ client }: ClientDetailTabsProps) {
                   ))}
                 </TableBody>
               </Table>
+            )}
+          </CardContent>
+        </Card>
+      </TabsContent>
+
+      <TabsContent value="pricing">
+        {/* Billing Configuration */}
+        <Card className="border-slate-800 bg-slate-900/50 mb-6">
+          <CardHeader>
+            <CardTitle className="text-white">Billing Configuration</CardTitle>
+            <CardDescription className="text-slate-400">
+              Configure billing settings for this client.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="rounded-lg border border-slate-700 bg-slate-800/50 p-4">
+              <div className="flex items-start gap-4">
+                <input
+                  type="checkbox"
+                  id="allowOverdraft"
+                  checked={allowOverdraft}
+                  onChange={(e) => toggleAllowOverdraft(e.target.checked)}
+                  disabled={savingOverdraft || loadingPricing}
+                  className="mt-1 h-4 w-4 rounded border-slate-600 bg-slate-700 text-indigo-500 focus:ring-indigo-500"
+                />
+                <div className="flex-1">
+                  <Label htmlFor="allowOverdraft" className="text-white cursor-pointer">
+                    Allow Overdraft (Negative Balance)
+                  </Label>
+                  <p className="mt-1 text-sm text-slate-400">
+                    When enabled, the client can continue creating KYC sessions even with zero or negative credit balance. 
+                    The balance will go negative and will be reconciled at the end of the billing cycle.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Pricing Tiers */}
+        <Card className="border-slate-800 bg-slate-900/50">
+          <CardHeader className="flex flex-row items-center justify-between">
+            <div>
+              <CardTitle className="text-white">Pricing Tiers</CardTitle>
+              <CardDescription className="text-slate-400">
+                Configure volume-based pricing for TrueIdentity KYC sessions.
+                Current month usage: {currentMonthUsage} sessions.
+              </CardDescription>
+            </div>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={addPricingTier}
+                className="border-slate-700 bg-transparent text-slate-300 hover:bg-slate-800 hover:text-white"
+              >
+                <Plus className="mr-1.5 h-4 w-4" />
+                Add Tier
+              </Button>
+              <Button
+                size="sm"
+                onClick={savePricingTiers}
+                disabled={savingPricing || pricingTiers.length === 0}
+                className="bg-gradient-to-r from-indigo-500 to-violet-500 text-white hover:from-indigo-600 hover:to-violet-600"
+              >
+                {savingPricing ? "Saving..." : "Save Pricing"}
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {loadingPricing ? (
+              <p className="text-sm text-slate-400">Loading pricing tiers...</p>
+            ) : pricingTiers.length === 0 ? (
+              <div className="rounded-lg border border-dashed border-slate-700 p-8 text-center">
+                <DollarSign className="mx-auto mb-4 h-12 w-12 text-slate-600" />
+                <p className="text-sm text-slate-400 mb-4">
+                  No pricing tiers configured. Add tiers to set volume-based pricing.
+                </p>
+                <Button
+                  variant="outline"
+                  onClick={addPricingTier}
+                  className="border-slate-700 bg-transparent text-slate-300 hover:bg-slate-800 hover:text-white"
+                >
+                  <Plus className="mr-1.5 h-4 w-4" />
+                  Add First Tier
+                </Button>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div className="rounded-lg border border-slate-700 bg-slate-800/50 p-4">
+                  <p className="text-xs text-slate-500 mb-2">
+                    Pricing is applied based on monthly volume. Set min/max volume ranges and price per KYC session.
+                  </p>
+                </div>
+                
+                <Table>
+                  <TableHeader>
+                    <TableRow className="border-slate-800 hover:bg-transparent">
+                      <TableHead className="text-slate-400">Tier Name</TableHead>
+                      <TableHead className="text-slate-400">Min Volume</TableHead>
+                      <TableHead className="text-slate-400">Max Volume</TableHead>
+                      <TableHead className="text-slate-400">Price per KYC (MYR)</TableHead>
+                      <TableHead className="text-right text-slate-400">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {pricingTiers.map((tier, index) => (
+                      <TableRow key={tier.id || index} className="border-slate-800">
+                        <TableCell>
+                          <Input
+                            value={tier.tier_name}
+                            onChange={(e) => updatePricingTier(index, "tier_name", e.target.value)}
+                            className="h-8 w-32 border-slate-700 bg-slate-800 text-white"
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <Input
+                            type="number"
+                            min={0}
+                            value={tier.min_volume}
+                            onChange={(e) => updatePricingTier(index, "min_volume", parseInt(e.target.value) || 0)}
+                            className="h-8 w-24 border-slate-700 bg-slate-800 text-white"
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <Input
+                            type="number"
+                            min={tier.min_volume}
+                            value={tier.max_volume ?? ""}
+                            placeholder="Unlimited"
+                            onChange={(e) => updatePricingTier(index, "max_volume", e.target.value ? parseInt(e.target.value) : null)}
+                            className="h-8 w-24 border-slate-700 bg-slate-800 text-white placeholder:text-slate-500"
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <Input
+                            type="number"
+                            step="0.01"
+                            min={0}
+                            value={tier.price_per_unit}
+                            onChange={(e) => updatePricingTier(index, "price_per_unit", e.target.value)}
+                            className="h-8 w-24 border-slate-700 bg-slate-800 text-white"
+                          />
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => removePricingTier(index)}
+                            className="h-8 w-8 text-red-400 hover:bg-red-500/10 hover:text-red-300"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+
+                <div className="rounded-lg border border-slate-700 bg-slate-800/30 p-4">
+                  <h4 className="text-sm font-medium text-white mb-2">Example Pricing Calculation</h4>
+                  <p className="text-xs text-slate-400">
+                    If a client uses 150 KYC sessions in a month with tiers: 0-100 @ RM5, 101-500 @ RM4.50
+                    <br />
+                    Total: (100 × RM5) + (50 × RM4.50) = RM500 + RM225 = RM725
+                  </p>
+                </div>
+              </div>
             )}
           </CardContent>
         </Card>

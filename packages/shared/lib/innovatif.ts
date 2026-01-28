@@ -9,6 +9,15 @@ const BASE_URL = process.env.INNOVATIF_BASE_URL || "https://staging.ekyc.xendity
 
 const CIPHER_ALGORITHM = "aes-256-cbc";
 
+// Type for Innovatif API responses
+interface InnovatifApiResponse {
+  success?: boolean;
+  status_code?: string | number;
+  status_message?: string;
+  data?: string | { message?: string; [key: string]: unknown };
+  [key: string]: unknown;
+}
+
 /**
  * Format date for Innovatif API
  * Format: "YYYY-MM-DD HH:mm:ss"
@@ -20,26 +29,34 @@ function formatRequestTime(date: Date = new Date()): string {
 
 /**
  * Generate signature for Innovatif API
- * Algorithm: base64(md5(api_key + md5_key + package_name + ref_id + md5_key + request_time))
+ * Algorithm: base64(md5_hex(api_key + md5_key + package_name + ref_id + md5_key + request_time))
+ * 
+ * Note: PHP's md5() returns a hex string by default, then base64_encode() encodes that.
+ * So we need: base64(md5_as_hex_string), not base64(md5_raw_bytes)
  */
 export function generateSignature(refId: string, requestTime: string): string {
   const source = API_KEY + MD5_KEY + PACKAGE_NAME + refId + MD5_KEY + requestTime;
-  const md5Hash = crypto.createHash("md5").update(source).digest();
-  return md5Hash.toString("base64");
+  // Get MD5 as hex string (like PHP's md5() default)
+  const md5Hex = crypto.createHash("md5").update(source).digest("hex");
+  // Base64 encode the hex string (not the raw bytes)
+  return Buffer.from(md5Hex).toString("base64");
 }
 
 /**
  * Encrypt request body using AES-256-CBC
- * Key: (CIPHERTEXT + API_KEY).substring(0, 32)
- * IV: CIPHERTEXT (decoded from base64)
+ * Key: (CIPHERTEXT + API_KEY).substring(0, 32) - using the base64 string directly
+ * IV: CIPHERTEXT as UTF-8 bytes (the 16-char base64 string, not decoded)
+ * 
+ * Note: Innovatif's PHP uses the base64 string itself as both IV and key prefix,
+ * NOT the decoded value. The base64 string "MTIzNDU2Nzg5MDEy" is 16 chars = 16 bytes.
  */
 export function encryptRequest(body: object): string {
-  // Decode CIPHERTEXT from base64 to get the actual IV bytes
-  const ivBuffer = Buffer.from(CIPHERTEXT, "base64");
+  // Use CIPHERTEXT as UTF-8 string (16 chars = 16 bytes for AES-256-CBC IV)
+  const ivBuffer = Buffer.from(CIPHERTEXT, "utf8");
   
-  // Key is (CIPHERTEXT decoded + API_KEY), truncated to 32 bytes
-  const keySource = ivBuffer.toString() + API_KEY;
-  const key = Buffer.from(keySource.substring(0, 32));
+  // Key is (CIPHERTEXT + API_KEY), truncated to 32 bytes
+  const keySource = CIPHERTEXT + API_KEY;
+  const key = Buffer.from(keySource.substring(0, 32), "utf8");
   
   const json = JSON.stringify(body);
   const cipher = crypto.createCipheriv(CIPHER_ALGORITHM, key, ivBuffer);
@@ -54,12 +71,12 @@ export function encryptRequest(body: object): string {
  * Decrypt response data using AES-256-CBC
  */
 export function decryptResponse(encryptedData: string): unknown {
-  // Decode CIPHERTEXT from base64 to get the actual IV bytes
-  const ivBuffer = Buffer.from(CIPHERTEXT, "base64");
+  // Use CIPHERTEXT as UTF-8 string (16 chars = 16 bytes for AES-256-CBC IV)
+  const ivBuffer = Buffer.from(CIPHERTEXT, "utf8");
   
-  // Key is (CIPHERTEXT decoded + API_KEY), truncated to 32 bytes
-  const keySource = ivBuffer.toString() + API_KEY;
-  const key = Buffer.from(keySource.substring(0, 32));
+  // Key is (CIPHERTEXT + API_KEY), truncated to 32 bytes
+  const keySource = CIPHERTEXT + API_KEY;
+  const key = Buffer.from(keySource.substring(0, 32), "utf8");
   
   const decipher = crypto.createDecipheriv(CIPHER_ALGORITHM, key, ivBuffer);
   
@@ -95,13 +112,17 @@ export async function createInnovatifTransaction(
     documentType: string;
     sessionId: string;
   },
-  backendUrl: string
+  backendUrl: string,
+  coreUrl?: string
 ): Promise<{
   onboardingId: string;
   onboardingUrl: string;
 }> {
   const requestTime = formatRequestTime();
   const signature = generateSignature(params.refId, requestTime);
+
+  // Use core URL for user-facing redirect, backend URL for webhooks
+  const redirectBaseUrl = coreUrl || backendUrl;
 
   // Build request body per Innovatif API spec
   const requestBody = {
@@ -113,7 +134,7 @@ export async function createInnovatifTransaction(
     document_type: params.documentType,
     platform: "Web",
     signature: signature,
-    response_url: `${backendUrl}/r/${params.sessionId}`,
+    response_url: `${redirectBaseUrl}/r/${params.sessionId}`,
     backend_url: `${backendUrl}/api/internal/webhooks/innovatif/ekyc`,
     callback_mode: "1", // Summary mode
     response_mode: "1", // With queries
@@ -141,28 +162,39 @@ export async function createInnovatifTransaction(
     throw new Error(`Innovatif API error: ${response.status}`);
   }
 
-  const result = await response.json();
+  const result = await response.json() as InnovatifApiResponse;
 
   // Check for API-level errors
-  if (result.status_code !== "200" && result.status_code !== 200) {
+  // Innovatif API can return either:
+  // - { success: true, data: "encrypted_string" }
+  // - { status_code: 200, ... }
+  // - { success: false, data: { message: "error" } }
+  const isSuccess = result.success === true || 
+                    result.status_code === "200" || 
+                    result.status_code === 200;
+  
+  if (!isSuccess) {
     console.error("Innovatif API returned error:", result);
-    throw new Error(result.status_message || "Innovatif API returned error");
+    const errorData = typeof result.data === "object" ? result.data : undefined;
+    const errorMessage = errorData?.message || result.status_message || "Innovatif API returned error";
+    throw new Error(errorMessage);
   }
 
   // Decrypt response data if encrypted
-  let responseData = result;
+  let responseData: Record<string, unknown> = result;
   if (result.data && typeof result.data === "string") {
     try {
       responseData = decryptResponse(result.data) as Record<string, unknown>;
+      console.log("Decrypted Innovatif response:", responseData);
     } catch (e) {
       // If decryption fails, assume unencrypted response
-      console.warn("Response decryption failed, using raw response");
+      console.warn("Response decryption failed, using raw response:", e);
     }
   }
 
   // Extract onboarding URL and ID
   const onboardingUrl = responseData.onboarding_url || responseData.url;
-  const onboardingId = responseData.onboarding_id || responseData.transaction_id;
+  const onboardingId = responseData.onboarding_id || responseData.transaction_id || responseData.ref_id;
 
   if (!onboardingUrl || !onboardingId) {
     console.error("Missing onboarding data in response:", responseData);
@@ -211,9 +243,9 @@ export async function getInnovatifTransactionStatus(refId: string): Promise<{
     throw new Error(`Innovatif API error: ${response.status}`);
   }
 
-  const result = await response.json();
+  const result = await response.json() as InnovatifApiResponse;
 
-  let responseData = result;
+  let responseData: Record<string, unknown> = result;
   if (result.data && typeof result.data === "string") {
     try {
       responseData = decryptResponse(result.data) as Record<string, unknown>;
@@ -223,8 +255,8 @@ export async function getInnovatifTransactionStatus(refId: string): Promise<{
   }
 
   return {
-    status: responseData.status || result.status_code,
-    result: responseData.result,
+    status: String(responseData.status || result.status_code || ""),
+    result: responseData.result as string | undefined,
     data: responseData,
   };
 }

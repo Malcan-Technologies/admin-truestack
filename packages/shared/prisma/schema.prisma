@@ -104,6 +104,7 @@ model Product {
   clientApiKeys        ClientApiKey[]
   clientProductConfigs ClientProductConfig[]
   creditLedgerEntries  CreditLedger[]
+  pricingTiers         PricingTier[]
 
   @@map("product")
 }
@@ -131,6 +132,7 @@ model Client {
   productConfigs       ClientProductConfig[]
   creditLedgerEntries  CreditLedger[]
   kycSessions          KycSession[]
+  pricingTiers         PricingTier[]
 
   @@index([code])
   @@index([status])
@@ -250,6 +252,7 @@ model KycSession {
   webhookDeliveredAt   DateTime? @map("webhook_delivered_at")
   webhookAttempts      Int       @default(0) @map("webhook_attempts")
   webhookLastError     String?   @map("webhook_last_error")
+  billed               Boolean   @default(false) // true when credit has been deducted for this session
   expiresAt            DateTime? @map("expires_at")
   createdAt            DateTime  @default(now()) @map("created_at")
   updatedAt            DateTime  @default(now()) @updatedAt @map("updated_at")
@@ -285,4 +288,43 @@ model WebhookLog {
   @@index([kycSessionId])
   @@index([payloadHash])
   @@map("webhook_log")
+}
+
+// ============================================
+// Pricing Tiers (Volume-based pricing per client)
+// ============================================
+
+model PricingTier {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  clientId     String   @map("client_id") @db.Uuid
+  productId    String   @map("product_id")
+  tierName     String   @map("tier_name") // e.g., 'Tier 1', 'Tier 2'
+  minVolume    Int      @map("min_volume") // 0, 101, 501, etc.
+  maxVolume    Int?     @map("max_volume") // 100, 500, NULL (unlimited)
+  pricePerUnit Decimal  @map("price_per_unit") @db.Decimal(10, 4) // e.g., 5.0000 MYR
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @default(now()) @updatedAt @map("updated_at")
+
+  // Relations
+  client  Client  @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id])
+
+  @@unique([clientId, productId, minVolume])
+  @@index([clientId, productId])
+  @@map("pricing_tier")
+}
+
+// ============================================
+// Demo Webhook Storage (for demo page)
+// ============================================
+
+model DemoWebhook {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  sessionId    String   @map("session_id") @db.Uuid
+  event        String   // e.g., 'kyc.session.completed'
+  payload      Json     // Full webhook payload
+  receivedAt   DateTime @default(now()) @map("received_at")
+
+  @@index([sessionId])
+  @@map("demo_webhook")
 }

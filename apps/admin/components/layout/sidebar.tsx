@@ -12,6 +12,7 @@ import {
   LogOut,
   ChevronDown,
   Fingerprint,
+  FlaskConical,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { signOut } from "@/lib/auth-client";
@@ -50,6 +51,14 @@ const navSections: NavSection[] = [
     items: [
       { title: "Sessions", href: "/true-identity/sessions", icon: FileCheck },
       { title: "Usage", href: "/true-identity/usage", icon: BarChart3 },
+    ],
+  },
+  {
+    title: "DEMO",
+    collapsible: true,
+    icon: FlaskConical,
+    items: [
+      { title: "TrueIdentity", href: "/demo/trueidentity", icon: Fingerprint },
     ],
   },
 ];
