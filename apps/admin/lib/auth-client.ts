@@ -9,6 +9,9 @@ const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
 
 export const authClient = createAuthClient({
   baseURL: `${apiUrl}/api/auth`,
+  fetchOptions: {
+    credentials: "include", // Required for cross-origin cookie handling
+  },
 });
 
 export const { signIn, signOut, useSession } = authClient;

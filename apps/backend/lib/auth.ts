@@ -80,6 +80,13 @@ export const auth = betterAuth({
   // Disable public signup - admin users are pre-created
   advanced: {
     disableCSRFCheck: false,
+    // Enable cross-subdomain cookies for admin.truestack.my <-> api.truestack.my
+    crossSubDomainCookies: isProduction
+      ? {
+          enabled: true,
+          domain: ".truestack.my", // Leading dot for all subdomains
+        }
+      : undefined,
   },
 
   // CORS configuration for cross-origin requests from admin app
