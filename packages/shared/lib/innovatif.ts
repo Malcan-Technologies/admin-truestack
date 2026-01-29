@@ -106,6 +106,12 @@ export type InnovatifPlatform = "Web" | "iOS" | "Android";
 
 /**
  * Create a transaction on Innovatif eKYC Gateway
+ * 
+ * @param params - Transaction parameters
+ * @param backendUrl - TrueStack backend URL for webhooks
+ * @param coreUrl - TrueStack core app URL for default user redirects
+ * @param customRedirectUrl - Optional client-specified redirect URL. If provided, users are redirected
+ *                            directly to this URL after KYC completion instead of TrueStack's status page.
  */
 export async function createInnovatifTransaction(
   params: {
@@ -117,7 +123,8 @@ export async function createInnovatifTransaction(
     platform?: InnovatifPlatform;
   },
   backendUrl: string,
-  coreUrl?: string
+  coreUrl?: string,
+  customRedirectUrl?: string
 ): Promise<{
   onboardingId: string;
   onboardingUrl: string;
@@ -126,16 +133,15 @@ export async function createInnovatifTransaction(
   const requestTime = formatRequestTime();
   const signature = generateSignature(params.refId, requestTime);
 
-  // Use core URL for user-facing redirect, backend URL for webhooks
-  const redirectBaseUrl = coreUrl || backendUrl;
-
   // Build request body per Innovatif API spec
-  // Default platform to "Web" if not specified
   const webhookUrl = `${backendUrl}/api/internal/webhooks/innovatif/ekyc`;
-  const responseUrl = `${redirectBaseUrl}/r/${params.sessionId}`;
+  
+  // Use custom redirect URL if provided, otherwise use TrueStack's status page
+  // When client provides their own redirect_url, they handle the user experience themselves
+  const responseUrl = customRedirectUrl || `${coreUrl || backendUrl}/r/${params.sessionId}`;
   
   console.log(`[Innovatif] Creating transaction with webhook URL: ${webhookUrl}`);
-  console.log(`[Innovatif] Response URL: ${responseUrl}`);
+  console.log(`[Innovatif] Response URL: ${responseUrl}${customRedirectUrl ? ' (custom)' : ''}`);
   
   const requestBody = {
     api_key: API_KEY,

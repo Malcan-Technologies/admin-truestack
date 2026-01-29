@@ -1,7 +1,8 @@
 import cron from "node-cron";
 
 const INTERNAL_API_KEY = process.env.INTERNAL_API_KEY;
-const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+// Use BETTER_AUTH_URL in production (set in ECS), fallback to NEXT_PUBLIC_API_URL or localhost
+const BASE_URL = process.env.BETTER_AUTH_URL || process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
 
 /**
  * Initialize cron jobs for the backend.

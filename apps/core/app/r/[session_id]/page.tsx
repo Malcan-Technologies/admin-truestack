@@ -23,11 +23,11 @@ export default async function KycRedirectPage({
   const isPending = !isSuccess && !isFailed;
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center px-4 py-12">
+    <div className="min-h-screen flex flex-col items-center justify-center bg-white px-4 py-12">
       {/* Logo */}
       <div className="mb-8">
         <Image
-          src="/truestack-white.svg"
+          src="/truestack-black.svg"
           alt="TrueStack"
           width={180}
           height={48}
@@ -36,13 +36,13 @@ export default async function KycRedirectPage({
       </div>
 
       {/* Status Card */}
-      <div className="w-full max-w-md rounded-2xl border border-slate-800 bg-slate-900/80 p-8 text-center shadow-xl backdrop-blur">
+      <div className="w-full max-w-md rounded-2xl border border-gray-200 bg-gray-50 p-8 text-center shadow-lg">
         {/* Status Icon */}
         <div className="mb-6">
           {isSuccess ? (
-            <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-green-500/20">
+            <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-green-100">
               <svg
-                className="h-10 w-10 text-green-400"
+                className="h-10 w-10 text-green-600"
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"
@@ -56,9 +56,9 @@ export default async function KycRedirectPage({
               </svg>
             </div>
           ) : isFailed ? (
-            <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-red-500/20">
+            <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-red-100">
               <svg
-                className="h-10 w-10 text-red-400"
+                className="h-10 w-10 text-red-600"
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"
@@ -72,9 +72,9 @@ export default async function KycRedirectPage({
               </svg>
             </div>
           ) : (
-            <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-indigo-500/20">
+            <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-indigo-100">
               <svg
-                className="h-10 w-10 text-indigo-400"
+                className="h-10 w-10 text-indigo-600"
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"
@@ -91,7 +91,7 @@ export default async function KycRedirectPage({
         </div>
 
         {/* Status Text */}
-        <h1 className="mb-2 text-2xl font-semibold text-white">
+        <h1 className="mb-2 text-2xl font-semibold text-gray-900">
           {isSuccess
             ? "Verification Complete"
             : isFailed
@@ -99,7 +99,7 @@ export default async function KycRedirectPage({
             : "Verification in Progress"}
         </h1>
 
-        <p className="mb-6 text-slate-400">
+        <p className="mb-6 text-gray-600">
           {isSuccess
             ? "Your identity has been successfully verified. You may now close this window."
             : isFailed
@@ -108,26 +108,26 @@ export default async function KycRedirectPage({
         </p>
 
         {/* Session ID */}
-        <div className="mb-6 rounded-lg bg-slate-800/50 px-4 py-3">
-          <p className="text-xs text-slate-500 mb-1">Session Reference</p>
-          <p className="font-mono text-sm text-slate-300">{session_id}</p>
+        <div className="mb-6 rounded-lg bg-gray-100 px-4 py-3">
+          <p className="text-xs text-gray-500 mb-1">Session Reference</p>
+          <p className="font-mono text-sm text-gray-700">{session_id}</p>
         </div>
 
         {/* Status Badge */}
         <div className="flex justify-center">
           {isSuccess ? (
-            <span className="inline-flex items-center rounded-full bg-green-500/10 px-4 py-2 text-sm font-medium text-green-400 ring-1 ring-inset ring-green-500/20">
-              <span className="mr-2 h-2 w-2 rounded-full bg-green-400"></span>
+            <span className="inline-flex items-center rounded-full bg-green-100 px-4 py-2 text-sm font-medium text-green-700 ring-1 ring-inset ring-green-600/20">
+              <span className="mr-2 h-2 w-2 rounded-full bg-green-600"></span>
               Approved
             </span>
           ) : isFailed ? (
-            <span className="inline-flex items-center rounded-full bg-red-500/10 px-4 py-2 text-sm font-medium text-red-400 ring-1 ring-inset ring-red-500/20">
-              <span className="mr-2 h-2 w-2 rounded-full bg-red-400"></span>
+            <span className="inline-flex items-center rounded-full bg-red-100 px-4 py-2 text-sm font-medium text-red-700 ring-1 ring-inset ring-red-600/20">
+              <span className="mr-2 h-2 w-2 rounded-full bg-red-600"></span>
               Rejected
             </span>
           ) : (
-            <span className="inline-flex items-center rounded-full bg-indigo-500/10 px-4 py-2 text-sm font-medium text-indigo-400 ring-1 ring-inset ring-indigo-500/20">
-              <span className="mr-2 h-2 w-2 animate-pulse rounded-full bg-indigo-400"></span>
+            <span className="inline-flex items-center rounded-full bg-indigo-100 px-4 py-2 text-sm font-medium text-indigo-700 ring-1 ring-inset ring-indigo-600/20">
+              <span className="mr-2 h-2 w-2 animate-pulse rounded-full bg-indigo-600"></span>
               Processing
             </span>
           )}
@@ -136,13 +136,13 @@ export default async function KycRedirectPage({
 
       {/* Footer */}
       <div className="mt-8 text-center">
-        <p className="text-sm text-slate-500">
+        <p className="text-sm text-gray-500">
           Powered by{" "}
-          <Link href="https://truestack.my" className="text-indigo-400 hover:text-indigo-300">
+          <Link href="https://truestack.my" className="text-indigo-600 hover:text-indigo-500">
             TrueStack
           </Link>
         </p>
-        <p className="mt-2 text-xs text-slate-600">
+        <p className="mt-2 text-xs text-gray-400">
           Secure identity verification for Malaysia
         </p>
       </div>

@@ -45,9 +45,10 @@ POST /v1/kyc/sessions
 | `webhook_url` | string | **Yes** | URL to receive webhook on completion. Must be a valid HTTP/HTTPS URL. |
 | `document_type` | string | No | Type of document. Default: `"1"` (MyKad). See Document Types below. |
 | `platform` | string | No | End-user's platform. Default: `"Web"`. See Platform Values below. |
+| `redirect_url` | string | No | Custom URL to redirect users after KYC completion. If provided, this URL is passed to Innovatif as the `response_url`. If not provided, users are redirected to TrueStack's status page (`/r/{session_id}`). |
 | `metadata` | object | No | Custom key-value pairs to associate with the session. Returned in webhooks. |
 
-**Note:** The `success_url` and `fail_url` fields are stored for reference but not used for Innovatif redirects. After KYC completion, users are redirected to TrueStack's status page which displays the verification result.
+**Note:** The `success_url` and `fail_url` fields are stored for reference but are legacy fields. Use `redirect_url` for custom redirects.
 
 #### Document Types
 

@@ -176,6 +176,7 @@ export async function POST(request: NextRequest) {
       success_url,
       fail_url,
       webhook_url,
+      redirect_url,
       metadata = {},
     } = body;
 
@@ -217,6 +218,21 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Validate redirect_url format if provided (optional)
+    if (redirect_url) {
+      try {
+        const parsedUrl = new URL(redirect_url);
+        if (!["http:", "https:"].includes(parsedUrl.protocol)) {
+          throw new Error("Invalid protocol");
+        }
+      } catch {
+        return NextResponse.json(
+          { error: "BAD_REQUEST", message: "redirect_url must be a valid HTTP/HTTPS URL" },
+          { status: 400 }
+        );
+      }
+    }
+
     // Generate ref_id
     const refId = generateRefId(clientInfo.clientCode);
 
@@ -227,8 +243,8 @@ export async function POST(request: NextRequest) {
       created_at: string;
     }>(
       `INSERT INTO kyc_session 
-        (client_id, ref_id, document_name, document_number, document_type, platform, success_url, fail_url, webhook_url, metadata, expires_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW() + INTERVAL '24 hours')
+        (client_id, ref_id, document_name, document_number, document_type, platform, success_url, fail_url, webhook_url, redirect_url, metadata, expires_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW() + INTERVAL '24 hours')
        RETURNING id, ref_id, created_at`,
       [
         clientInfo.clientId,
@@ -240,6 +256,7 @@ export async function POST(request: NextRequest) {
         success_url || null, // Optional: stored for reference
         fail_url || null,    // Optional: stored for reference
         webhook_url,         // Required: where we send the webhook
+        redirect_url || null, // Optional: client's custom redirect URL after KYC
         JSON.stringify(metadata),
       ]
     );
@@ -277,6 +294,8 @@ export async function POST(request: NextRequest) {
     const coreUrl = process.env.CORE_APP_URL || "http://localhost:3000";
 
     // Call Innovatif to create transaction
+    // If client provides redirect_url, users will be redirected there after KYC completion
+    // Otherwise, they'll be redirected to TrueStack's status page
     try {
       const innovatifResult = await createInnovatifTransaction(
         {
@@ -288,7 +307,8 @@ export async function POST(request: NextRequest) {
           platform: platform,
         },
         backendUrl,
-        coreUrl
+        coreUrl,
+        redirect_url || undefined // Pass custom redirect URL if provided
       );
 
       // Update session with Innovatif response
