@@ -141,29 +141,49 @@ export async function GET(
     if (kycSession.innovatif_response) {
       const resp = kycSession.innovatif_response;
       
-      // Document OCR data
+      // Data may be at top level OR nested in step1/step2 depending on callback_mode
+      const step1 = resp.step1 as Record<string, unknown> | undefined;
+      const step2 = resp.step2 as Record<string, unknown> | undefined;
+      const ocrResult = step1?.ocr_result as Record<string, unknown> | undefined;
+      const textSimilarity = step1?.text_similarity_result as Record<string, unknown> | undefined;
+      const landmarkStatus = step1?.landmark_status as Record<string, unknown> | undefined;
+      
+      // Document OCR data - check nested step1.ocr_result first, then top level
       document = {
-        full_name: resp.full_name || resp.name || null,
-        id_number: resp.id_number || null,
-        id_number_back: resp.id_number_back || null,
-        address: resp.address || null,
-        gender: resp.gender || null,
+        full_name: ocrResult?.full_name || resp.full_name || resp.name || null,
+        id_number: ocrResult?.front_document_number || resp.id_number || null,
+        id_number_back: ocrResult?.back_document_number || resp.id_number_back || null,
+        address: ocrResult?.front_document_address || resp.address || null,
+        gender: ocrResult?.front_document_gender || resp.gender || null,
         dob: resp.dob || null,
         nationality: resp.nationality || null,
         religion: resp.religion || null,
         race: resp.race || null,
       };
 
-      // Verification results
+      // Verification results - check nested data first, then top level
+      // text_similarity_result status: 1 = match, 0 = no match
+      // landmark_status.landmark_is_valid: boolean
+      // step2.is_identical: boolean (face match)
+      // step2.percentage: number (face match score)
+      // step2.status: boolean (liveness passed)
       verification = {
-        document_valid: resp.is_document_valid ?? null,
-        name_match: resp.is_name_match ?? null,
-        id_match: resp.is_id_match ?? null,
-        front_back_match: resp.is_front_back_match ?? null,
-        landmark_valid: resp.is_landmark_valid ?? null,
-        face_match: resp.is_facematch ?? null,
-        face_match_score: resp.face_match_score ?? resp.facematch_score ?? null,
-        liveness_passed: resp.is_liveness ?? null,
+        document_valid: landmarkStatus?.labelcheck_result !== undefined 
+          ? !(landmarkStatus.labelcheck_result as boolean) // labelcheck_result=false means document is valid (no issues)
+          : (resp.is_document_valid ?? null),
+        name_match: textSimilarity?.name_similarity_status !== undefined 
+          ? (textSimilarity.name_similarity_status as number) === 1 
+          : (resp.is_name_match ?? null),
+        id_match: textSimilarity?.document_number_similarity_status !== undefined 
+          ? (textSimilarity.document_number_similarity_status as number) === 1 
+          : (resp.is_id_match ?? null),
+        front_back_match: textSimilarity?.front_back_number_similarity_status !== undefined 
+          ? (textSimilarity.front_back_number_similarity_status as number) === 1 
+          : (ocrResult?.front_document_number_check ?? ocrResult?.back_document_number_check ?? resp.is_front_back_match ?? null),
+        landmark_valid: landmarkStatus?.landmark_is_valid ?? resp.is_landmark_valid ?? null,
+        face_match: step2?.is_identical ?? resp.is_facematch ?? null,
+        face_match_score: step2?.percentage ?? resp.face_match_score ?? resp.facematch_score ?? null,
+        liveness_passed: step2?.status ?? resp.is_liveness ?? null,
       };
     }
 
