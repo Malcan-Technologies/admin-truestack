@@ -102,24 +102,59 @@ export function KycSessionDetailModal({
   onOpenChange,
 }: KycSessionDetailModalProps) {
   const [loading, setLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [session, setSession] = useState<KycSessionDetail | null>(null);
   const [activeTab, setActiveTab] = useState("overview");
 
+  const fetchSession = async () => {
+    if (!sessionId) return;
+    setLoading(true);
+    try {
+      const data = await apiClient<KycSessionDetail>(
+        `/api/admin/clients/${clientId}/kyc-sessions/${sessionId}`
+      );
+      setSession(data);
+    } catch (error) {
+      console.error("Failed to load session:", error);
+      toast.error("Failed to load session details");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const refreshFromProvider = async () => {
+    if (!sessionId) return;
+    setRefreshing(true);
+    try {
+      const result = await apiClient<{
+        success: boolean;
+        refreshed: boolean;
+        images_uploaded?: Record<string, boolean>;
+        error?: string;
+      }>(`/api/admin/kyc-sessions/${sessionId}/refresh`, {
+        method: "POST",
+      });
+      
+      if (result.success) {
+        toast.success("Session refreshed from provider");
+        // Reload session data to show updated info
+        await fetchSession();
+      } else {
+        toast.error(result.error || "Failed to refresh from provider");
+      }
+    } catch (error) {
+      console.error("Failed to refresh session:", error);
+      toast.error("Failed to refresh session from provider");
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
   useEffect(() => {
     if (open && sessionId) {
-      setLoading(true);
       setSession(null);
       setActiveTab("overview");
-
-      apiClient<KycSessionDetail>(
-        `/api/admin/clients/${clientId}/kyc-sessions/${sessionId}`
-      )
-        .then(setSession)
-        .catch((error) => {
-          console.error("Failed to load session:", error);
-          toast.error("Failed to load session details");
-        })
-        .finally(() => setLoading(false));
+      fetchSession();
     }
   }, [open, sessionId, clientId]);
 
@@ -200,10 +235,24 @@ export function KycSessionDetailModal({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="border-slate-800 bg-slate-900 max-w-4xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="text-white flex items-center gap-3">
-            {session && getStatusIcon(session.status, session.result)}
-            KYC Session Details
-          </DialogTitle>
+          <div className="flex items-center justify-between">
+            <DialogTitle className="text-white flex items-center gap-3">
+              {session && getStatusIcon(session.status, session.result)}
+              KYC Session Details
+            </DialogTitle>
+            {session && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={refreshFromProvider}
+                disabled={refreshing}
+                className="border-indigo-500/30 bg-transparent text-indigo-300 hover:bg-indigo-500/10"
+              >
+                <RefreshCw className={`mr-2 h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
+                {refreshing ? "Refreshing..." : "Refresh from Provider"}
+              </Button>
+            )}
+          </div>
           <DialogDescription className="text-slate-400">
             {session ? (
               <span className="font-mono">{session.ref_id}</span>
@@ -314,32 +363,32 @@ export function KycSessionDetailModal({
                     Session Details
                   </h4>
                   <div className="space-y-2 text-sm">
-                    <div className="flex justify-between">
-                      <span className="text-slate-400">Session ID</span>
-                      <span className="text-white font-mono text-xs">
+                    <div className="flex justify-between gap-2">
+                      <span className="text-slate-400 shrink-0">Session ID</span>
+                      <span className="text-white font-mono text-xs truncate">
                         {session.id.substring(0, 8)}...
                       </span>
                     </div>
-                    <div className="flex justify-between">
-                      <span className="text-slate-400">Ref ID</span>
-                      <span className="text-white font-mono text-xs">
+                    <div className="flex justify-between gap-2">
+                      <span className="text-slate-400 shrink-0">Ref ID</span>
+                      <span className="text-white font-mono text-xs truncate">
                         {session.ref_id}
                       </span>
                     </div>
-                    <div className="flex justify-between">
-                      <span className="text-slate-400">Created</span>
-                      <span className="text-white">
+                    <div className="flex justify-between gap-2">
+                      <span className="text-slate-400 shrink-0">Created</span>
+                      <span className="text-white text-xs">
                         {formatDateTime(session.created_at)}
                       </span>
                     </div>
-                    <div className="flex justify-between">
-                      <span className="text-slate-400">Updated</span>
-                      <span className="text-white">
+                    <div className="flex justify-between gap-2">
+                      <span className="text-slate-400 shrink-0">Updated</span>
+                      <span className="text-white text-xs">
                         {formatDateTime(session.updated_at)}
                       </span>
                     </div>
-                    <div className="flex justify-between items-center">
-                      <span className="text-slate-400 flex items-center gap-1">
+                    <div className="flex justify-between items-center gap-2">
+                      <span className="text-slate-400 flex items-center gap-1 shrink-0">
                         <DollarSign className="h-3 w-3" />
                         Billed
                       </span>
@@ -489,7 +538,15 @@ export function KycSessionDetailModal({
                     Raw Innovatif Response
                   </h4>
                   <pre className="text-xs text-slate-400 overflow-auto max-h-64 p-3 rounded bg-slate-900">
-                    {JSON.stringify(session._raw, null, 2)}
+                    {JSON.stringify(session._raw, (key, value) => {
+                      // Truncate base64 image strings
+                      if (typeof value === "string" && value.length > 200) {
+                        if (value.startsWith("data:image") || value.match(/^[A-Za-z0-9+/=]{100,}$/)) {
+                          return `[BASE64 IMAGE - ${value.length} chars]`;
+                        }
+                      }
+                      return value;
+                    }, 2)}
                   </pre>
                 </div>
               )}
@@ -571,11 +628,11 @@ export function KycSessionDetailModal({
                   {session.images.best_frame && (
                     <div className="rounded-lg border border-slate-700 bg-slate-800/30 p-4">
                       <h4 className="text-sm font-medium text-slate-300 mb-3">
-                        Liveness Best Frame
+                        Selfie (Liveness)
                       </h4>
                       <img
                         src={session.images.best_frame}
-                        alt="Best Frame"
+                        alt="Selfie"
                         className="rounded-lg w-full object-contain max-h-48"
                       />
                       <Button
@@ -631,7 +688,7 @@ export function KycSessionDetailModal({
                     </div>
                   )}
                   <div className="flex justify-between">
-                    <span className="text-slate-400">Attempts</span>
+                    <span className="text-slate-400">Sent</span>
                     <span className="text-white">{session.webhook_attempts}</span>
                   </div>
                   {session.webhook_url && (

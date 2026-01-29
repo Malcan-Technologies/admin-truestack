@@ -386,32 +386,32 @@ export function KycSessionDetailModal({
                     Session Details
                   </h4>
                   <div className="space-y-2 text-sm">
-                    <div className="flex justify-between">
-                      <span className="text-slate-400">Session ID</span>
-                      <span className="text-white font-mono text-xs">
+                    <div className="flex justify-between gap-2">
+                      <span className="text-slate-400 shrink-0">Session ID</span>
+                      <span className="text-white font-mono text-xs truncate">
                         {session.id.substring(0, 8)}...
                       </span>
                     </div>
-                    <div className="flex justify-between">
-                      <span className="text-slate-400">Ref ID</span>
-                      <span className="text-white font-mono text-xs">
+                    <div className="flex justify-between gap-2">
+                      <span className="text-slate-400 shrink-0">Ref ID</span>
+                      <span className="text-white font-mono text-xs truncate">
                         {session.ref_id}
                       </span>
                     </div>
-                    <div className="flex justify-between">
-                      <span className="text-slate-400">Created</span>
-                      <span className="text-white">
+                    <div className="flex justify-between gap-2">
+                      <span className="text-slate-400 shrink-0">Created</span>
+                      <span className="text-white text-xs">
                         {formatDateTime(session.created_at)}
                       </span>
                     </div>
-                    <div className="flex justify-between">
-                      <span className="text-slate-400">Updated</span>
-                      <span className="text-white">
+                    <div className="flex justify-between gap-2">
+                      <span className="text-slate-400 shrink-0">Updated</span>
+                      <span className="text-white text-xs">
                         {formatDateTime(session.updated_at)}
                       </span>
                     </div>
-                    <div className="flex justify-between items-center">
-                      <span className="text-slate-400 flex items-center gap-1">
+                    <div className="flex justify-between items-center gap-2">
+                      <span className="text-slate-400 flex items-center gap-1 shrink-0">
                         <DollarSign className="h-3 w-3" />
                         Billed
                       </span>
@@ -561,7 +561,15 @@ export function KycSessionDetailModal({
                     Raw Innovatif Response
                   </h4>
                   <pre className="text-xs text-slate-400 overflow-auto max-h-64 p-3 rounded bg-slate-900">
-                    {JSON.stringify(session._raw, null, 2)}
+                    {JSON.stringify(session._raw, (key, value) => {
+                      // Truncate base64 image strings
+                      if (typeof value === "string" && value.length > 200) {
+                        if (value.startsWith("data:image") || value.match(/^[A-Za-z0-9+/=]{100,}$/)) {
+                          return `[BASE64 IMAGE - ${value.length} chars]`;
+                        }
+                      }
+                      return value;
+                    }, 2)}
                   </pre>
                 </div>
               )}
@@ -643,11 +651,11 @@ export function KycSessionDetailModal({
                   {session.images.best_frame && (
                     <div className="rounded-lg border border-slate-700 bg-slate-800/30 p-4">
                       <h4 className="text-sm font-medium text-slate-300 mb-3">
-                        Liveness Best Frame
+                        Selfie (Liveness)
                       </h4>
                       <img
                         src={session.images.best_frame}
-                        alt="Best Frame"
+                        alt="Selfie"
                         className="rounded-lg w-full object-contain max-h-48"
                       />
                       <Button
@@ -703,7 +711,7 @@ export function KycSessionDetailModal({
                     </div>
                   )}
                   <div className="flex justify-between">
-                    <span className="text-slate-400">Attempts</span>
+                    <span className="text-slate-400">Sent</span>
                     <span className="text-white">{session.webhook_attempts}</span>
                   </div>
                   {session.webhook_url && (
