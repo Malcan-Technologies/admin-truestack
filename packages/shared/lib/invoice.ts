@@ -130,11 +130,16 @@ export async function calculateBillingPeriod(
   clientId: string,
   targetEndDate: Date
 ): Promise<{ periodStart: Date; periodEnd: Date }> {
-  // Find the last invoice for this client (excluding voided)
+  // Find the last successfully completed invoice for this client
+  // Only consider invoices that have an S3 key (PDF was generated)
+  // Exclude void, pending, and failed invoices
   const lastInvoice = await queryOne<{ period_end: string }>(`
     SELECT period_end 
     FROM invoice 
-    WHERE client_id = $1 AND status != 'void'
+    WHERE client_id = $1 
+      AND status IN ('generated', 'partial', 'paid', 'superseded')
+      AND s3_key IS NOT NULL
+      AND s3_key != ''
     ORDER BY period_end DESC 
     LIMIT 1
   `, [clientId]);
@@ -331,7 +336,15 @@ export async function generateInvoice(
   const dueDate = new Date(now);
   dueDate.setDate(dueDate.getDate() + PAYMENT_TERMS_DAYS);
 
-  // Create invoice record
+  // First, clean up any failed/pending invoices for this client
+  await query(`
+    DELETE FROM invoice 
+    WHERE client_id = $1 
+      AND status = 'pending'
+      AND generated_at < NOW() - INTERVAL '1 hour'
+  `, [clientId]);
+
+  // Create invoice record with 'pending' status - will be updated to 'generated' after PDF upload
   const invoiceResult = await queryOne<{ id: string }>(`
     INSERT INTO invoice (
       client_id, invoice_number, period_start, period_end, due_date,
@@ -350,8 +363,8 @@ export async function generateInvoice(
     currentBalance,
     amountDueCredits,
     amountDueMyr,
-    `invoices/${clientId}/${invoiceNumber}.pdf`, // Placeholder, will update
-    "generated",
+    "", // Empty s3_key until PDF is uploaded
+    "pending", // Will be updated to 'generated' after PDF upload
     options.generatedBy || null,
   ]);
 
@@ -361,9 +374,6 @@ export async function generateInvoice(
 
   const invoiceId = invoiceResult.id;
   const s3Key = `invoices/${clientId}/${invoiceId}.pdf`;
-
-  // Update s3_key with actual ID
-  await query(`UPDATE invoice SET s3_key = $1 WHERE id = $2`, [s3Key, invoiceId]);
 
   // Create line items for usage
   for (const usageItem of usage) {
@@ -447,16 +457,31 @@ export async function generateInvoice(
     },
   };
 
-  // Generate PDF
-  const pdfBuffer = await generateInvoicePDF(pdfData);
+  // Generate PDF and upload to S3
+  try {
+    const pdfBuffer = await generateInvoicePDF(pdfData);
 
-  // Upload to S3
-  await s3Client.send(new PutObjectCommand({
-    Bucket: S3_BUCKET,
-    Key: s3Key,
-    Body: pdfBuffer,
-    ContentType: "application/pdf",
-  }));
+    // Upload to S3
+    await s3Client.send(new PutObjectCommand({
+      Bucket: S3_BUCKET,
+      Key: s3Key,
+      Body: pdfBuffer,
+      ContentType: "application/pdf",
+    }));
+
+    // Update invoice to 'generated' status with s3_key
+    await query(`
+      UPDATE invoice 
+      SET status = 'generated', s3_key = $1, updated_at = NOW()
+      WHERE id = $2
+    `, [s3Key, invoiceId]);
+
+  } catch (pdfError) {
+    // Clean up the failed invoice record
+    console.error("Failed to generate/upload PDF, cleaning up invoice:", pdfError);
+    await query(`DELETE FROM invoice WHERE id = $1`, [invoiceId]);
+    throw pdfError;
+  }
 
   return {
     id: invoiceId,
