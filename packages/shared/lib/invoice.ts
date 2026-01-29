@@ -38,6 +38,9 @@ export interface GeneratedInvoice {
   previousBalanceCredits: number;
   amountDueCredits: number;
   amountDueMyr: number;
+  sstRate: number;
+  sstAmountMyr: number;
+  totalWithSstMyr: number;
   s3Key: string;
   status: string;
 }
@@ -56,6 +59,9 @@ export interface RecordedPayment {
   receiptNumber: string;
   amountCredits: number;
   amountMyr: number;
+  sstRate: number;
+  sstAmountMyr: number;
+  totalWithSstMyr: number;
   s3Key: string;
   invoiceStatus: string;
   newBalance: number;
@@ -68,6 +74,7 @@ export interface RecordedPayment {
 const TIMEZONE = "Asia/Kuala_Lumpur";
 const PAYMENT_TERMS_DAYS = 14;
 const CREDITS_PER_MYR = 10;
+const SST_RATE = 0.08; // 8% SST (Service Tax)
 const S3_BUCKET = process.env.S3_KYC_BUCKET || "trueidentity-kyc-documents-dev";
 const IS_DEV = process.env.NODE_ENV === "development";
 const LOCAL_INVOICE_DIR = process.cwd(); // s3_key already includes "invoices/" prefix
@@ -402,6 +409,10 @@ export async function generateInvoice(
   const amountDueCredits = Math.max(0, -currentBalance);
   const amountDueMyr = amountDueCredits / CREDITS_PER_MYR;
 
+  // Calculate SST (8% on the MYR amount)
+  const sstAmountMyr = Math.round(amountDueMyr * SST_RATE * 100) / 100; // Round to 2 decimal places
+  const totalWithSstMyr = Math.round((amountDueMyr + sstAmountMyr) * 100) / 100;
+
   // Generate invoice number
   const invoiceNumber = await getNextInvoiceNumber();
 
@@ -422,8 +433,9 @@ export async function generateInvoice(
     INSERT INTO invoice (
       client_id, invoice_number, period_start, period_end, due_date,
       total_usage_credits, previous_balance_credits, credit_balance_at_generation,
-      amount_due_credits, amount_due_myr, s3_key, status, generated_by
-    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+      amount_due_credits, amount_due_myr, sst_rate, sst_amount_myr, total_with_sst_myr,
+      s3_key, status, generated_by
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
     RETURNING id
   `, [
     clientId,
@@ -436,6 +448,9 @@ export async function generateInvoice(
     currentBalance,
     amountDueCredits,
     amountDueMyr,
+    SST_RATE,
+    sstAmountMyr,
+    totalWithSstMyr,
     "", // Empty s3_key until PDF is uploaded
     "pending", // Will be updated to 'generated' after PDF upload
     options.generatedBy || null,
@@ -527,6 +542,9 @@ export async function generateInvoice(
       previousBalanceCredits,
       amountDueCredits,
       amountDueMyr,
+      sstRate: SST_RATE,
+      sstAmountMyr,
+      totalWithSstMyr,
     },
   };
 
@@ -565,6 +583,9 @@ export async function generateInvoice(
     previousBalanceCredits,
     amountDueCredits,
     amountDueMyr,
+    sstRate: SST_RATE,
+    sstAmountMyr,
+    totalWithSstMyr,
     s3Key,
     status: finalStatus,
   };
@@ -607,6 +628,10 @@ export async function recordPayment(
   const paymentAmount = payment.amountCredits;
   const paymentMyr = paymentAmount / CREDITS_PER_MYR;
   
+  // Calculate SST on payment (8%)
+  const sstAmountMyr = Math.round(paymentMyr * SST_RATE * 100) / 100;
+  const totalWithSstMyr = Math.round((paymentMyr + sstAmountMyr) * 100) / 100;
+  
   // Calculate how much goes to invoice vs excess credit
   const invoicePayment = Math.min(paymentAmount, remainingDue);
   const excessCredit = Math.max(0, paymentAmount - remainingDue);
@@ -627,15 +652,19 @@ export async function recordPayment(
   const paymentResult = await queryOne<{ id: string }>(`
     INSERT INTO payment (
       invoice_id, client_id, amount_credits, amount_myr,
+      sst_rate, sst_amount_myr, total_with_sst_myr,
       payment_date, payment_method, payment_reference,
       receipt_number, s3_key, recorded_by, notes
-    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
     RETURNING id
   `, [
     invoiceId,
     invoice.client_id,
     paymentAmount,
     paymentMyr,
+    SST_RATE,
+    sstAmountMyr,
+    totalWithSstMyr,
     payment.paymentDate.toISOString().split("T")[0],
     payment.paymentMethod || null,
     payment.paymentReference || null,
@@ -720,6 +749,9 @@ export async function recordPayment(
     payment: {
       amountCredits: paymentAmount,
       amountMyr: paymentMyr,
+      sstRate: SST_RATE,
+      sstAmountMyr,
+      totalWithSstMyr,
       method: payment.paymentMethod,
       reference: payment.paymentReference,
     },
@@ -736,6 +768,9 @@ export async function recordPayment(
     receiptNumber,
     amountCredits: paymentAmount,
     amountMyr: paymentMyr,
+    sstRate: SST_RATE,
+    sstAmountMyr,
+    totalWithSstMyr,
     s3Key,
     invoiceStatus: newStatus,
     newBalance,

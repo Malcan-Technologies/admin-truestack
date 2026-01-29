@@ -43,6 +43,9 @@ type InvoicePreview = {
   currentBalance: number;
   amountDueCredits: number;
   amountDueMyr: number;
+  sstRate: number;
+  sstAmountMyr: number;
+  totalWithSstMyr: number;
 };
 
 interface GenerateInvoiceModalProps {
@@ -273,20 +276,32 @@ export function GenerateInvoiceModal({
 
             {/* Summary */}
             <div className="rounded-lg border border-indigo-500/30 bg-indigo-500/10 p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="text-lg font-medium text-white">Amount Due</h3>
-                  <p className="text-sm text-slate-400">
-                    Current balance: {preview.currentBalance.toLocaleString()} credits
-                  </p>
+              <div className="space-y-3">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-slate-400">Subtotal</span>
+                  <span className="text-slate-300">
+                    RM {preview.amountDueMyr.toFixed(2)} ({preview.amountDueCredits.toLocaleString()} credits)
+                  </span>
                 </div>
-                <div className="text-right">
-                  <p className="text-2xl font-bold text-white">
-                    RM {preview.amountDueMyr.toFixed(2)}
-                  </p>
-                  <p className="text-sm text-slate-400">
-                    {preview.amountDueCredits.toLocaleString()} credits
-                  </p>
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-slate-400">SST ({Math.round(preview.sstRate * 100)}%)</span>
+                  <span className="text-slate-300">RM {preview.sstAmountMyr.toFixed(2)}</span>
+                </div>
+                <div className="border-t border-indigo-500/30 pt-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="text-lg font-medium text-white">Total Amount Due</h3>
+                      <p className="text-sm text-slate-400">
+                        Current balance: {preview.currentBalance.toLocaleString()} credits
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-2xl font-bold text-white">
+                        RM {preview.totalWithSstMyr.toFixed(2)}
+                      </p>
+                      <p className="text-xs text-slate-500">Inclusive of SST</p>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>

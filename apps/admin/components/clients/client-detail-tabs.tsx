@@ -117,6 +117,9 @@ type Invoice = {
   previous_balance_credits: number;
   amount_due_credits: number;
   amount_due_myr: string;
+  sst_rate: string;
+  sst_amount_myr: string;
+  total_with_sst_myr: string;
   amount_paid_credits: number;
   amount_paid_myr: string;
   status: string;
@@ -129,6 +132,9 @@ type Payment = {
   receipt_number: string;
   amount_credits: number;
   amount_myr: string;
+  sst_rate: string;
+  sst_amount_myr: string;
+  total_with_sst_myr: string;
   payment_date: string;
   payment_method: string | null;
   payment_reference: string | null;
@@ -1016,8 +1022,10 @@ export function ClientDetailTabs({ client }: ClientDetailTabsProps) {
                         </TableCell>
                         <TableCell className="text-right">
                           <div>
-                            <span className="text-slate-300">RM {parseFloat(invoice.amount_due_myr).toFixed(2)}</span>
-                            <p className="text-xs text-slate-500">{invoice.amount_due_credits.toLocaleString()} cr</p>
+                            <span className="text-slate-300">RM {parseFloat(invoice.total_with_sst_myr).toFixed(2)}</span>
+                            <p className="text-xs text-slate-500">
+                              {invoice.amount_due_credits.toLocaleString()} cr + {Math.round(parseFloat(invoice.sst_rate) * 100)}% SST
+                            </p>
                           </div>
                         </TableCell>
                         <TableCell className="text-right">
@@ -1112,13 +1120,13 @@ export function ClientDetailTabs({ client }: ClientDetailTabsProps) {
                                           </p>
                                         </div>
                                       </div>
-                                      <div className="flex items-center gap-4">
+                                        <div className="flex items-center gap-4">
                                         <div className="text-right">
                                           <p className="text-sm font-medium text-green-400">
-                                            RM {parseFloat(payment.amount_myr).toFixed(2)}
+                                            RM {parseFloat(payment.total_with_sst_myr).toFixed(2)}
                                           </p>
                                           <p className="text-xs text-slate-500">
-                                            {payment.amount_credits.toLocaleString()} credits
+                                            {payment.amount_credits.toLocaleString()} cr + {Math.round(parseFloat(payment.sst_rate) * 100)}% SST
                                           </p>
                                         </div>
                                         <Button

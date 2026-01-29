@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { query, queryOne } from "@truestack/shared/db";
+import { query } from "@truestack/shared/db";
 import { recordPayment, getReceiptPdfUrl } from "@truestack/shared/invoice";
 
 // GET /api/admin/clients/:id/invoices/:invoiceId/payments - List payments for invoice
@@ -14,59 +14,54 @@ export async function GET(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { id: clientId, invoiceId } = await params;
+    const { id, invoiceId } = await params;
 
-    // Verify invoice belongs to client
-    const invoice = await queryOne<{ id: string }>(`
-      SELECT id FROM invoice WHERE id = $1 AND client_id = $2
-    `, [invoiceId, clientId]);
-
-    if (!invoice) {
-      return NextResponse.json({ error: "Invoice not found" }, { status: 404 });
-    }
-
-    // Get payments
     const payments = await query<{
       id: string;
       receipt_number: string;
       amount_credits: number;
       amount_myr: string;
+      sst_rate: string;
+      sst_amount_myr: string;
+      total_with_sst_myr: string;
       payment_date: string;
       payment_method: string | null;
       payment_reference: string | null;
-      s3_key: string;
       recorded_by_name: string | null;
-      notes: string | null;
-      created_at: string;
-    }>(`
-      SELECT 
+      s3_key: string;
+    }>(
+      `SELECT 
         p.id,
         p.receipt_number,
         p.amount_credits,
         p.amount_myr,
+        COALESCE(p.sst_rate, 0.08) as sst_rate,
+        COALESCE(p.sst_amount_myr, ROUND(p.amount_myr * 0.08, 2)) as sst_amount_myr,
+        COALESCE(p.total_with_sst_myr, ROUND(p.amount_myr * 1.08, 2)) as total_with_sst_myr,
         p.payment_date,
         p.payment_method,
         p.payment_reference,
-        p.s3_key,
         u.name as recorded_by_name,
-        p.notes,
-        p.created_at
+        p.s3_key
       FROM payment p
       LEFT JOIN "user" u ON u.id = p.recorded_by
-      WHERE p.invoice_id = $1
-      ORDER BY p.payment_date DESC, p.created_at DESC
-    `, [invoiceId]);
+      WHERE p.invoice_id = $1 AND p.client_id = $2
+      ORDER BY p.created_at DESC`,
+      [invoiceId, id]
+    );
 
-    // Get presigned URLs for receipts
+    // Get receipt URLs
     const paymentsWithUrls = await Promise.all(
-      payments.map(async (payment) => {
+      payments.map(async (p) => {
         let receiptUrl: string | null = null;
-        try {
-          receiptUrl = await getReceiptPdfUrl(payment.id);
-        } catch {
-          // Receipt may not exist
+        if (p.s3_key) {
+          try {
+            receiptUrl = await getReceiptPdfUrl(p.id);
+          } catch (error) {
+            console.error("Error getting receipt URL:", error);
+          }
         }
-        return { ...payment, receiptUrl };
+        return { ...p, receiptUrl };
       })
     );
 
@@ -80,7 +75,7 @@ export async function GET(
   }
 }
 
-// POST /api/admin/clients/:id/invoices/:invoiceId/payments - Record new payment
+// POST /api/admin/clients/:id/invoices/:invoiceId/payments - Record a payment
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string; invoiceId: string }> }
@@ -91,38 +86,25 @@ export async function POST(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { id: clientId, invoiceId } = await params;
-
-    // Verify invoice belongs to client
-    const invoice = await queryOne<{ id: string; status: string }>(`
-      SELECT id, status FROM invoice WHERE id = $1 AND client_id = $2
-    `, [invoiceId, clientId]);
-
-    if (!invoice) {
-      return NextResponse.json({ error: "Invoice not found" }, { status: 404 });
-    }
-
-    // Parse body
+    const { invoiceId } = await params;
     const body = await request.json();
     const { amountCredits, paymentDate, paymentMethod, paymentReference, notes } = body;
 
-    // Validate required fields
-    if (!amountCredits || typeof amountCredits !== "number" || amountCredits <= 0) {
+    if (!amountCredits || amountCredits < 0) {
       return NextResponse.json(
-        { error: "amountCredits is required and must be a positive number" },
+        { error: "Invalid payment amount" },
         { status: 400 }
       );
     }
 
     if (!paymentDate) {
       return NextResponse.json(
-        { error: "paymentDate is required" },
+        { error: "Payment date is required" },
         { status: 400 }
       );
     }
 
-    // Record the payment
-    const result = await recordPayment(invoiceId, {
+    const payment = await recordPayment(invoiceId, {
       amountCredits,
       paymentDate: new Date(paymentDate),
       paymentMethod,
@@ -131,25 +113,11 @@ export async function POST(
       recordedBy: session.user.id,
     });
 
-    // Get receipt URL
-    let receiptUrl: string | null = null;
-    try {
-      receiptUrl = await getReceiptPdfUrl(result.id);
-    } catch {
-      // Receipt may not be ready yet
-    }
-
-    return NextResponse.json({
-      payment: {
-        ...result,
-        receiptUrl,
-      },
-    }, { status: 201 });
+    return NextResponse.json({ payment });
   } catch (error) {
     console.error("Error recording payment:", error);
-    const message = error instanceof Error ? error.message : "Failed to record payment";
     return NextResponse.json(
-      { error: message },
+      { error: error instanceof Error ? error.message : "Failed to record payment" },
       { status: 500 }
     );
   }

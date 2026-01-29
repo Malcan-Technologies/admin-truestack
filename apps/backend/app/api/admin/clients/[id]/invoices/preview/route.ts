@@ -1,9 +1,31 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { queryOne } from "@truestack/shared/db";
-import { calculateBillingPeriod, getClientBalance, getUnpaidInvoices, queryUsageByTier } from "@truestack/shared/invoice";
+import {
+  calculateBillingPeriod,
+  queryUsageByTier,
+  getUnpaidInvoices,
+  getClientBalance,
+} from "@truestack/shared/invoice";
 
-// GET /api/admin/clients/:id/invoices/preview - Preview invoice before generating
+const SST_RATE = 0.08; // 8% SST
+const CREDITS_PER_MYR = 10;
+const MALAYSIA_OFFSET_MS = 8 * 60 * 60 * 1000;
+
+function getMalaysiaTodayStartUTC(): Date {
+  const now = new Date();
+  const malaysiaTime = new Date(now.getTime() + MALAYSIA_OFFSET_MS);
+  const malaysiaDateStr = malaysiaTime.toISOString().split("T")[0];
+  const midnightMalaysiaAsUTC = new Date(malaysiaDateStr + "T00:00:00.000Z");
+  return new Date(midnightMalaysiaAsUTC.getTime() - MALAYSIA_OFFSET_MS);
+}
+
+function getMalaysiaYesterdayEndUTC(): Date {
+  const todayStart = getMalaysiaTodayStartUTC();
+  return new Date(todayStart.getTime() - 1);
+}
+
+// GET /api/admin/clients/:id/invoices/preview - Preview invoice before generation
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -15,12 +37,23 @@ export async function GET(
     }
 
     const { id: clientId } = await params;
-    const { searchParams } = new URL(request.url);
-    const endDateParam = searchParams.get("endDate");
 
-    // Verify client exists
-    const client = await queryOne<{ id: string; name: string; code: string }>(
-      "SELECT id, name, code FROM client WHERE id = $1",
+    // Check for pending invoices that might block generation
+    const pendingInvoice = await queryOne<{ id: string }>(
+      `SELECT id FROM invoice WHERE client_id = $1 AND status = 'pending'`,
+      [clientId]
+    );
+
+    if (pendingInvoice) {
+      return NextResponse.json({
+        canGenerate: false,
+        reason: "A previous invoice generation is still pending. Please wait or clean up stuck invoices.",
+      });
+    }
+
+    // Get client details
+    const client = await queryOne<{ name: string; code: string }>(
+      `SELECT name, code FROM client WHERE id = $1`,
       [clientId]
     );
 
@@ -28,42 +61,30 @@ export async function GET(
       return NextResponse.json({ error: "Client not found" }, { status: 404 });
     }
 
-    // Calculate end date (default to yesterday in Malaysia timezone)
-    let endDate: Date;
-    if (endDateParam) {
-      endDate = new Date(endDateParam);
-    } else {
-      // Get yesterday end (23:59:59.999) in Malaysia timezone as UTC
-      const MALAYSIA_OFFSET_MS = 8 * 60 * 60 * 1000;
-      const now = new Date();
-      const malaysiaTime = new Date(now.getTime() + MALAYSIA_OFFSET_MS);
-      const malaysiaDateStr = malaysiaTime.toISOString().split("T")[0];
-      const midnightMalaysiaAsUTC = new Date(malaysiaDateStr + "T00:00:00.000Z");
-      const todayStartUTC = new Date(midnightMalaysiaAsUTC.getTime() - MALAYSIA_OFFSET_MS);
-      endDate = new Date(todayStartUTC.getTime() - 1); // End of yesterday (1ms before today)
-    }
-
-    // Get billing period
+    // Calculate billing period
+    const endDate = getMalaysiaYesterdayEndUTC();
     let billingPeriod;
     try {
       billingPeriod = await calculateBillingPeriod(clientId, endDate);
     } catch (error) {
       return NextResponse.json({
         canGenerate: false,
-        reason: error instanceof Error ? error.message : "Cannot calculate billing period",
+        reason: error instanceof Error ? error.message : "Failed to calculate billing period",
       });
     }
 
+    const { periodStart, periodEnd } = billingPeriod;
+
     // Check if period is valid
-    if (billingPeriod.periodStart > billingPeriod.periodEnd) {
+    if (periodStart > periodEnd) {
       return NextResponse.json({
         canGenerate: false,
-        reason: "No billable period available. The last invoice already covers up to this date.",
+        reason: "No billable period available. The billing period has already been invoiced.",
       });
     }
 
     // Get usage by tier
-    const usage = await queryUsageByTier(clientId, billingPeriod.periodStart, billingPeriod.periodEnd);
+    const usage = await queryUsageByTier(clientId, periodStart, periodEnd);
     const totalUsageCredits = usage.reduce((sum, u) => sum + u.totalCredits, 0);
 
     // Get unpaid invoices
@@ -75,7 +96,11 @@ export async function GET(
 
     // Calculate amount due
     const amountDueCredits = Math.max(0, -currentBalance);
-    const amountDueMyr = amountDueCredits / 10;
+    const amountDueMyr = amountDueCredits / CREDITS_PER_MYR;
+
+    // Calculate SST
+    const sstAmountMyr = Math.round(amountDueMyr * SST_RATE * 100) / 100;
+    const totalWithSstMyr = Math.round((amountDueMyr + sstAmountMyr) * 100) / 100;
 
     return NextResponse.json({
       canGenerate: true,
@@ -84,8 +109,8 @@ export async function GET(
           name: client.name,
           code: client.code,
         },
-        periodStart: billingPeriod.periodStart,
-        periodEnd: billingPeriod.periodEnd,
+        periodStart: periodStart.toISOString(),
+        periodEnd: periodEnd.toISOString(),
         usage,
         totalUsageCredits,
         unpaidInvoices,
@@ -93,12 +118,15 @@ export async function GET(
         currentBalance,
         amountDueCredits,
         amountDueMyr,
+        sstRate: SST_RATE,
+        sstAmountMyr,
+        totalWithSstMyr,
       },
     });
   } catch (error) {
-    console.error("Error previewing invoice:", error);
+    console.error("Error generating invoice preview:", error);
     return NextResponse.json(
-      { error: "Failed to preview invoice" },
+      { error: "Failed to generate invoice preview" },
       { status: 500 }
     );
   }

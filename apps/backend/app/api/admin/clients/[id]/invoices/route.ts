@@ -1,9 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { query, queryOne } from "@truestack/shared/db";
-import { generateInvoice, calculateBillingPeriod, getClientBalance, getUnpaidInvoices, queryUsageByTier } from "@truestack/shared/invoice";
+import {
+  generateInvoice,
+  calculateBillingPeriod,
+  queryUsageByTier,
+  getUnpaidInvoices,
+  getClientBalance,
+} from "@truestack/shared/invoice";
 
-// GET /api/admin/clients/:id/invoices - List invoices for client
+const SST_RATE = 0.08; // 8% SST
+
+// GET /api/admin/clients/:id/invoices - List client invoices
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -14,19 +22,8 @@ export async function GET(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { id: clientId } = await params;
+    const { id } = await params;
 
-    // Verify client exists
-    const client = await queryOne<{ id: string }>(
-      "SELECT id FROM client WHERE id = $1",
-      [clientId]
-    );
-
-    if (!client) {
-      return NextResponse.json({ error: "Client not found" }, { status: 404 });
-    }
-
-    // Get invoices with line items count
     const invoices = await query<{
       id: string;
       invoice_number: string;
@@ -37,13 +34,16 @@ export async function GET(
       previous_balance_credits: number;
       amount_due_credits: number;
       amount_due_myr: string;
+      sst_rate: string;
+      sst_amount_myr: string;
+      total_with_sst_myr: string;
       amount_paid_credits: number;
       amount_paid_myr: string;
       status: string;
       generated_at: string;
       generated_by_name: string | null;
-    }>(`
-      SELECT 
+    }>(
+      `SELECT 
         i.id,
         i.invoice_number,
         i.period_start,
@@ -53,6 +53,9 @@ export async function GET(
         i.previous_balance_credits,
         i.amount_due_credits,
         i.amount_due_myr,
+        COALESCE(i.sst_rate, 0.08) as sst_rate,
+        COALESCE(i.sst_amount_myr, ROUND(i.amount_due_myr * 0.08, 2)) as sst_amount_myr,
+        COALESCE(i.total_with_sst_myr, ROUND(i.amount_due_myr * 1.08, 2)) as total_with_sst_myr,
         i.amount_paid_credits,
         i.amount_paid_myr,
         i.status,
@@ -61,8 +64,9 @@ export async function GET(
       FROM invoice i
       LEFT JOIN "user" u ON u.id = i.generated_by
       WHERE i.client_id = $1
-      ORDER BY i.period_end DESC, i.generated_at DESC
-    `, [clientId]);
+      ORDER BY i.generated_at DESC`,
+      [id]
+    );
 
     return NextResponse.json({ invoices });
   } catch (error) {
@@ -85,44 +89,17 @@ export async function POST(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { id: clientId } = await params;
+    const { id } = await params;
+    const userId = session.user.id;
 
-    // Verify client exists
-    const client = await queryOne<{ id: string; status: string }>(
-      "SELECT id, status FROM client WHERE id = $1",
-      [clientId]
-    );
+    const invoice = await generateInvoice(id, { generatedBy: userId });
 
-    if (!client) {
-      return NextResponse.json({ error: "Client not found" }, { status: 404 });
-    }
-
-    // Parse optional end date from body
-    const body = await request.json().catch(() => ({}));
-    const endDate = body.endDate ? new Date(body.endDate) : undefined;
-
-    // Generate the invoice
-    const invoice = await generateInvoice(clientId, {
-      endDate,
-      generatedBy: session.user.id,
-    });
-
-    return NextResponse.json({ invoice }, { status: 201 });
+    return NextResponse.json({ invoice });
   } catch (error) {
     console.error("Error generating invoice:", error);
-    const message = error instanceof Error ? error.message : "Failed to generate invoice";
     return NextResponse.json(
-      { error: message },
+      { error: error instanceof Error ? error.message : "Failed to generate invoice" },
       { status: 500 }
     );
   }
-}
-
-// GET /api/admin/clients/:id/invoices/preview - Preview invoice before generating
-export async function OPTIONS(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  // This is a workaround - we'll actually use a different endpoint for preview
-  return NextResponse.json({});
 }

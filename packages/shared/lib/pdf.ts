@@ -37,6 +37,9 @@ export interface InvoiceData {
     previousBalanceCredits: number;
     amountDueCredits: number;
     amountDueMyr: number;
+    sstRate: number;
+    sstAmountMyr: number;
+    totalWithSstMyr: number;
   };
 }
 
@@ -51,6 +54,9 @@ export interface ReceiptData {
   payment: {
     amountCredits: number;
     amountMyr: number;
+    sstRate: number;
+    sstAmountMyr: number;
+    totalWithSstMyr: number;
     method?: string;
     reference?: string;
   };
@@ -308,8 +314,23 @@ export async function generateInvoicePDF(data: InvoiceData): Promise<Buffer> {
   y -= 38;
   page.drawText("Conversion rate: 10 credits = RM 1", { x: totalsLabelX, y, size: 8, font: helvetica, color: colors.gray });
 
-  // Amount Due Box
-  y -= 40;
+  // Subtotal
+  y -= 25;
+  page.drawText("Subtotal:", { x: totalsLabelX, y, size: 10, font: helvetica, color: colors.gray });
+  const subtotalText = formatCurrency(data.summary.amountDueMyr);
+  const subtotalWidth = helvetica.widthOfTextAtSize(subtotalText, 10);
+  page.drawText(subtotalText, { x: totalsValueX - subtotalWidth, y, size: 10, font: helvetica, color: colors.dark });
+
+  // SST (8%)
+  y -= 18;
+  const sstPercent = Math.round(data.summary.sstRate * 100);
+  page.drawText(`SST (${sstPercent}%):`, { x: totalsLabelX, y, size: 10, font: helvetica, color: colors.gray });
+  const sstText = formatCurrency(data.summary.sstAmountMyr);
+  const sstWidth = helvetica.widthOfTextAtSize(sstText, 10);
+  page.drawText(sstText, { x: totalsValueX - sstWidth, y, size: 10, font: helvetica, color: colors.dark });
+
+  // Amount Due Box (Total with SST)
+  y -= 35;
   const amountBoxWidth = 220;
   const amountBoxX = width - 50 - amountBoxWidth;
   page.drawRectangle({
@@ -320,8 +341,8 @@ export async function generateInvoicePDF(data: InvoiceData): Promise<Buffer> {
     color: colors.primary,
   });
 
-  page.drawText("AMOUNT DUE", { x: amountBoxX + 15, y: y + 8, size: 12, font: helveticaBold, color: colors.white });
-  const amountText = formatCurrency(data.summary.amountDueMyr);
+  page.drawText("TOTAL AMOUNT DUE", { x: amountBoxX + 15, y: y + 8, size: 12, font: helveticaBold, color: colors.white });
+  const amountText = formatCurrency(data.summary.totalWithSstMyr);
   const amountWidth = helveticaBold.widthOfTextAtSize(amountText, 16);
   page.drawText(amountText, { x: amountBoxX + amountBoxWidth - 15 - amountWidth, y: y + 6, size: 16, font: helveticaBold, color: colors.white });
 
@@ -468,25 +489,32 @@ export async function generateReceiptPDF(data: ReceiptData): Promise<Buffer> {
   y -= 25;
   page.drawRectangle({
     x: 50,
-    y: y - 80,
+    y: y - 130,
     width: width - 100,
-    height: 100,
+    height: 150,
     color: colors.lightGray,
   });
 
   page.drawText("Payment Details", { x: 70, y: y - 5, size: 12, font: helveticaBold, color: colors.dark });
 
-  page.drawText("Amount Paid:", { x: 70, y: y - 30, size: 10, font: helvetica, color: colors.gray });
-  page.drawText(`${formatCurrency(data.payment.amountMyr)} (${data.payment.amountCredits} credits)`, { x: 180, y: y - 30, size: 10, font: helveticaBold, color: colors.dark });
+  page.drawText("Subtotal:", { x: 70, y: y - 30, size: 10, font: helvetica, color: colors.gray });
+  page.drawText(`${formatCurrency(data.payment.amountMyr)} (${data.payment.amountCredits} credits)`, { x: 180, y: y - 30, size: 10, font: helvetica, color: colors.dark });
 
-  page.drawText("Payment Method:", { x: 70, y: y - 50, size: 10, font: helvetica, color: colors.gray });
-  page.drawText(data.payment.method || "-", { x: 180, y: y - 50, size: 10, font: helvetica, color: colors.dark });
+  const sstPercent = Math.round(data.payment.sstRate * 100);
+  page.drawText(`SST (${sstPercent}%):`, { x: 70, y: y - 50, size: 10, font: helvetica, color: colors.gray });
+  page.drawText(formatCurrency(data.payment.sstAmountMyr), { x: 180, y: y - 50, size: 10, font: helvetica, color: colors.dark });
 
-  page.drawText("Reference:", { x: 70, y: y - 70, size: 10, font: helvetica, color: colors.gray });
-  page.drawText(data.payment.reference || "-", { x: 180, y: y - 70, size: 10, font: helvetica, color: colors.dark });
+  page.drawText("Total Paid:", { x: 70, y: y - 70, size: 10, font: helveticaBold, color: colors.gray });
+  page.drawText(formatCurrency(data.payment.totalWithSstMyr), { x: 180, y: y - 70, size: 10, font: helveticaBold, color: colors.dark });
+
+  page.drawText("Payment Method:", { x: 70, y: y - 95, size: 10, font: helvetica, color: colors.gray });
+  page.drawText(data.payment.method || "-", { x: 180, y: y - 95, size: 10, font: helvetica, color: colors.dark });
+
+  page.drawText("Reference:", { x: 70, y: y - 115, size: 10, font: helvetica, color: colors.gray });
+  page.drawText(data.payment.reference || "-", { x: 180, y: y - 115, size: 10, font: helvetica, color: colors.dark });
 
   // New Balance Box
-  y -= 110;
+  y -= 155;
   page.drawRectangle({
     x: width - 295,
     y: y - 30,

@@ -29,6 +29,9 @@ type Invoice = {
   invoice_number: string;
   amount_due_credits: number;
   amount_due_myr: string;
+  sst_rate: string;
+  sst_amount_myr: string;
+  total_with_sst_myr: string;
   amount_paid_credits: number;
   amount_paid_myr: string;
   due_date: string;
@@ -182,9 +185,21 @@ export function RecordPaymentModal({
             {/* Invoice Summary */}
             <div className="rounded-lg border border-slate-700 bg-slate-800/50 p-4 space-y-2">
               <div className="flex justify-between text-sm">
-                <span className="text-slate-400">Amount Due</span>
+                <span className="text-slate-400">Subtotal</span>
                 <span className="text-white">
                   RM {parseFloat(invoice.amount_due_myr).toFixed(2)}
+                </span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-slate-400">SST ({Math.round(parseFloat(invoice.sst_rate) * 100)}%)</span>
+                <span className="text-white">
+                  RM {parseFloat(invoice.sst_amount_myr).toFixed(2)}
+                </span>
+              </div>
+              <div className="flex justify-between text-sm font-medium border-t border-slate-700 pt-2">
+                <span className="text-slate-400">Total Amount Due</span>
+                <span className="text-white">
+                  RM {parseFloat(invoice.total_with_sst_myr).toFixed(2)}
                 </span>
               </div>
               <div className="flex justify-between text-sm">
@@ -221,11 +236,15 @@ export function RecordPaymentModal({
                 className="border-slate-700 bg-slate-800 text-white"
                 required={remainingMyr > 0}
               />
-              <p className="text-xs text-slate-500">
-                {amountMyr && !isNaN(parseFloat(amountMyr))
-                  ? `= ${Math.round(parseFloat(amountMyr) * 10).toLocaleString()} credits`
-                  : ""}
-              </p>
+              {amountMyr && !isNaN(parseFloat(amountMyr)) && parseFloat(amountMyr) > 0 && (
+                <div className="text-xs text-slate-500 space-y-0.5">
+                  <p>= {Math.round(parseFloat(amountMyr) * 10).toLocaleString()} credits</p>
+                  <p>+ SST (8%): RM {(parseFloat(amountMyr) * 0.08).toFixed(2)}</p>
+                  <p className="text-slate-400 font-medium">
+                    Total: RM {(parseFloat(amountMyr) * 1.08).toFixed(2)}
+                  </p>
+                </div>
+              )}
             </div>
 
             {/* Payment Date */}

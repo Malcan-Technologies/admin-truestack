@@ -360,6 +360,11 @@ model Invoice {
   amountDueCredits        Int       @map("amount_due_credits")
   amountDueMyr            Decimal   @map("amount_due_myr") @db.Decimal(10, 2)
 
+  // SST (8% tax on MYR amount)
+  sstRate                 Decimal   @default(0.08) @map("sst_rate") @db.Decimal(5, 4) // 0.0800 = 8%
+  sstAmountMyr            Decimal   @default(0) @map("sst_amount_myr") @db.Decimal(10, 2)
+  totalWithSstMyr         Decimal   @default(0) @map("total_with_sst_myr") @db.Decimal(10, 2)
+
   // Payment tracking
   amountPaidCredits       Int       @default(0) @map("amount_paid_credits")
   amountPaidMyr           Decimal   @default(0) @map("amount_paid_myr") @db.Decimal(10, 2)
@@ -438,6 +443,11 @@ model Payment {
   // Payment details
   amountCredits    Int      @map("amount_credits")
   amountMyr        Decimal  @map("amount_myr") @db.Decimal(10, 2)
+
+  // SST (8% tax on MYR amount)
+  sstRate          Decimal  @default(0.08) @map("sst_rate") @db.Decimal(5, 4) // 0.0800 = 8%
+  sstAmountMyr     Decimal  @default(0) @map("sst_amount_myr") @db.Decimal(10, 2)
+  totalWithSstMyr  Decimal  @default(0) @map("total_with_sst_myr") @db.Decimal(10, 2)
 
   // Payment info
   paymentDate      DateTime @map("payment_date") @db.Date
