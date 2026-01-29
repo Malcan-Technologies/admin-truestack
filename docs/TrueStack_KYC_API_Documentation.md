@@ -190,24 +190,26 @@ Once the verification is complete (approved or rejected):
 
 #### Step 7: Handle Webhook
 
-Your webhook endpoint receives the verification result:
+Your webhook endpoint receives a lightweight notification:
 
 ```json
 {
   "event": "kyc.session.completed",
-  "timestamp": "2026-01-29T10:30:00.000Z",
-  "data": {
-    "session_id": "550e8400-e29b-41d4-a716-446655440000",
-    "status": "completed",
-    "result": "approved",
-    "document_name": "Ahmad bin Abdullah",
-    "document_number": "901234-56-7890",
-    "metadata": {
-      "user_id": "usr_12345"
-    }
-  }
+  "session_id": "550e8400-e29b-41d4-a716-446655440000",
+  "ref_id": "CLI_mkxl2qbq_52c0732a",
+  "status": "completed",
+  "result": "approved",
+  "reject_message": null,
+  "document_name": "Ahmad bin Abdullah",
+  "document_number": "901234-56-7890",
+  "metadata": {
+    "user_id": "usr_12345"
+  },
+  "timestamp": "2026-01-29T10:30:00.000Z"
 }
 ```
+
+**Note**: The webhook contains basic session info. To get full OCR data, verification results, and images, call the [Get Session Status](#get-session-status) or [Refresh Session Status](#refresh-session-status) endpoint.
 
 #### Step 8: Update Your System
 
@@ -392,10 +394,26 @@ curl -X GET https://api.truestack.my/api/v1/kyc/sessions/550e8400-e29b-41d4-a716
   },
   "created_at": "2026-01-28T10:00:00.000Z",
   "updated_at": "2026-01-28T10:05:00.000Z",
-  "ocr_result": {
-    "name": "AHMAD BIN ABDULLAH",
-    "id_number": "901234567890",
-    "address": "123 JALAN EXAMPLE, 50000 KUALA LUMPUR"
+  "document": {
+    "full_name": "AHMAD BIN ABDULLAH",
+    "id_number": "901234-56-7890",
+    "id_number_back": "901234-56-7890-04-01",
+    "address": "123 JALAN EXAMPLE, 50000 KUALA LUMPUR",
+    "gender": "LELAKI",
+    "dob": null,
+    "nationality": null,
+    "religion": null,
+    "race": null
+  },
+  "verification": {
+    "document_valid": true,
+    "name_match": true,
+    "id_match": true,
+    "front_back_match": true,
+    "landmark_valid": true,
+    "face_match": true,
+    "face_match_score": 95,
+    "liveness_passed": true
   },
   "documents": {
     "front_document": "https://api.truestack.my/api/v1/kyc/sessions/.../documents/front_document",
@@ -406,7 +424,7 @@ curl -X GET https://api.truestack.my/api/v1/kyc/sessions/550e8400-e29b-41d4-a716
 }
 ```
 
-**Note**: `ocr_result` and `documents` are only included when session status is `completed`.
+**Note**: `document`, `verification`, and `documents` are only included when session status is `completed`.
 
 ---
 
@@ -517,81 +535,88 @@ When a KYC session completes, TrueStack sends a webhook notification to your con
 
 | Event | Description |
 |-------|-------------|
+| `kyc.session.started` | User opened the verification URL (status: pending) |
+| `kyc.session.processing` | User is actively completing verification (status: processing) |
 | `kyc.session.completed` | Session finished with a final result (approved/rejected) |
 | `kyc.session.expired` | Session expired before user completed verification |
 
+**Note**: You may receive webhooks for each status transition. The `kyc.session.completed` event is the most important one for updating your records.
+
 ### Webhook Payload
+
+Webhooks are **lightweight notifications** that inform you of status changes. They contain enough information to identify the session and its outcome, but do not include full OCR or verification data.
 
 ```http
 POST {your_webhook_url}
 Content-Type: application/json
 X-TrueStack-Event: kyc.session.completed
-X-TrueStack-Timestamp: 2026-01-29T15:30:00.000Z
-X-Webhook-Signature: sha256=abc123...
 ```
 
 ```json
 {
   "event": "kyc.session.completed",
-  "timestamp": "2026-01-29T15:30:00.000Z",
-  "data": {
-    "session_id": "550e8400-e29b-41d4-a716-446655440000",
-    "ref_id": "CLI_mkxl2qbq_52c0732a",
-    "status": "completed",
-    "result": "approved",
-    "document_name": "Ahmad bin Abdullah",
-    "document_number": "901234-56-7890",
-    "ocr_data": {
-      "name": "AHMAD BIN ABDULLAH",
-      "ic_number": "901234567890",
-      "address": "123 JALAN EXAMPLE, 50000 KUALA LUMPUR",
-      "gender": "LELAKI",
-      "nationality": "WARGANEGARA",
-      "date_of_birth": "1990-12-34"
-    },
-    "face_match_score": 0.95,
-    "liveness_score": 0.98,
-    "metadata": {
-      "user_id": "usr_12345",
-      "application_id": "app_67890"
-    }
-  }
+  "session_id": "550e8400-e29b-41d4-a716-446655440000",
+  "ref_id": "CLI_mkxl2qbq_52c0732a",
+  "status": "completed",
+  "result": "approved",
+  "reject_message": null,
+  "document_name": "Ahmad bin Abdullah",
+  "document_number": "901234-56-7890",
+  "metadata": {
+    "user_id": "usr_12345",
+    "application_id": "app_67890"
+  },
+  "timestamp": "2026-01-29T15:30:00.000Z"
 }
 ```
 
-### Webhook Security
+| Field | Description |
+|-------|-------------|
+| `event` | Event type (see [Webhook Events](#webhook-events)) |
+| `session_id` | Unique session identifier |
+| `ref_id` | Reference ID for this session |
+| `status` | Session status: `completed`, `expired` |
+| `result` | Verification result: `approved` or `rejected` |
+| `reject_message` | Reason for rejection (if applicable) |
+| `document_name` | Name provided when creating the session |
+| `document_number` | Document number provided when creating the session |
+| `metadata` | Your custom metadata passed when creating the session |
+| `timestamp` | When the webhook was sent (ISO 8601) |
 
-Verify webhook authenticity using the `X-Webhook-Signature` header:
+**Important**: To retrieve full OCR data, verification results, and document images, call the [Get Session Status](#get-session-status) or [Refresh Session Status](#refresh-session-status) endpoint using the `session_id` from the webhook.
+
+### Webhook Handler Example
 
 ```javascript
-const crypto = require('crypto');
-
-function verifyWebhookSignature(payload, signature, apiKey) {
-  const expectedSignature = 'sha256=' + crypto
-    .createHmac('sha256', apiKey)
-    .update(payload)
-    .digest('hex');
-  
-  return crypto.timingSafeEqual(
-    Buffer.from(signature),
-    Buffer.from(expectedSignature)
-  );
-}
-
 // In your webhook handler
-app.post('/webhooks/kyc', (req, res) => {
-  const signature = req.headers['x-webhook-signature'];
-  const payload = JSON.stringify(req.body);
-  
-  if (!verifyWebhookSignature(payload, signature, YOUR_API_KEY)) {
-    return res.status(401).send('Invalid signature');
-  }
-  
-  // Process the webhook
-  const { event, data } = req.body;
-  // ...
-  
+app.post('/webhooks/kyc', async (req, res) => {
+  // Respond immediately to acknowledge receipt
   res.status(200).send('OK');
+  
+  // Process the webhook asynchronously
+  const { event, session_id, status, result, metadata } = req.body;
+  
+  if (event === 'kyc.session.completed') {
+    // Fetch full verification details from API
+    const sessionDetails = await fetch(
+      `https://api.truestack.my/api/v1/kyc/sessions/${session_id}`,
+      {
+        method: 'POST', // Use POST to refresh and get full data
+        headers: { 'Authorization': `Bearer ${YOUR_API_KEY}` }
+      }
+    ).then(r => r.json());
+    
+    // Now you have full OCR data, verification results, and image URLs
+    const { document, verification, images } = sessionDetails;
+    
+    // Update your database
+    await updateUserVerification(metadata.user_id, {
+      status: result,
+      fullName: document?.full_name,
+      idNumber: document?.id_number,
+      faceMatchScore: verification?.face_match_score,
+    });
+  }
 });
 ```
 
@@ -613,6 +638,14 @@ Your webhook endpoint must return an **HTTP 2xx status code** (e.g., 200, 201, 2
 2. **Process asynchronously**: Queue webhook data for processing, don't block the response
 3. **Handle duplicates**: Use `session_id` for idempotency - you may receive multiple webhooks for the same session
 4. **Log everything**: Store the raw webhook payload for debugging
+5. **Fetch full details**: Use the session API to retrieve complete OCR and verification data
+
+### Webhook Delivery Notes
+
+- **No automatic retry**: Webhooks are sent once per status change. If your endpoint fails, the webhook is not automatically retried.
+- **Multiple webhooks possible**: You may receive multiple webhooks for the same session as it progresses through states (pending → processing → completed).
+- **Fallback to polling**: If you suspect a missed webhook, use the [Refresh Session Status](#refresh-session-status) endpoint to get the current status.
+- **Timeout**: Your endpoint must respond within 5 seconds or the webhook will be marked as failed.
 
 ---
 

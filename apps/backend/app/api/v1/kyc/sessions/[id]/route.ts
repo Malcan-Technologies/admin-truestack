@@ -123,34 +123,49 @@ export async function GET(
       response.reject_message = session.reject_message;
     }
 
-    // Include OCR result if completed and available
+    // Include OCR and verification data if completed and available
     if (session.status === "completed" && session.innovatif_response) {
-      // Extract OCR data from Innovatif response (exclude images)
-      const ocrFields = [
-        "document_type",
-        "name",
-        "id_number",
-        "address",
-        "postcode",
-        "city",
-        "state",
-        "nationality",
-        "gender",
-        "dob",
-        "religion",
-        "race",
-      ];
+      const resp = session.innovatif_response;
       
-      const ocrResult: Record<string, unknown> = {};
-      for (const field of ocrFields) {
-        if (session.innovatif_response[field] !== undefined) {
-          ocrResult[field] = session.innovatif_response[field];
-        }
-      }
+      // Data may be at top level OR nested in step1/step2 depending on callback_mode
+      const step1 = resp.step1 as Record<string, unknown> | undefined;
+      const step2 = resp.step2 as Record<string, unknown> | undefined;
+      const ocrData = step1?.ocr_result as Record<string, unknown> | undefined;
+      const textSimilarity = step1?.text_similarity_result as Record<string, unknown> | undefined;
+      const landmarkStatus = step1?.landmark_status as Record<string, unknown> | undefined;
       
-      if (Object.keys(ocrResult).length > 0) {
-        response.ocr_result = ocrResult;
-      }
+      // Document OCR data - check nested step1.ocr_result first, then top level
+      response.document = {
+        full_name: ocrData?.full_name || resp.full_name || resp.name || null,
+        id_number: ocrData?.front_document_number || resp.id_number || null,
+        id_number_back: ocrData?.back_document_number || resp.id_number_back || null,
+        address: ocrData?.front_document_address || resp.address || null,
+        gender: ocrData?.front_document_gender || resp.gender || null,
+        dob: resp.dob || null,
+        nationality: resp.nationality || null,
+        religion: resp.religion || null,
+        race: resp.race || null,
+      };
+
+      // Verification results - check nested data first, then top level
+      response.verification = {
+        document_valid: landmarkStatus?.labelcheck_result !== undefined 
+          ? !(landmarkStatus.labelcheck_result as boolean)
+          : (resp.is_document_valid ?? null),
+        name_match: textSimilarity?.name_similarity_status !== undefined 
+          ? (textSimilarity.name_similarity_status as number) === 1 
+          : (resp.is_name_match ?? null),
+        id_match: textSimilarity?.document_number_similarity_status !== undefined 
+          ? (textSimilarity.document_number_similarity_status as number) === 1 
+          : (resp.is_id_match ?? null),
+        front_back_match: textSimilarity?.front_back_number_similarity_status !== undefined 
+          ? (textSimilarity.front_back_number_similarity_status as number) === 1 
+          : (ocrData?.front_document_number_check ?? ocrData?.back_document_number_check ?? resp.is_front_back_match ?? null),
+        landmark_valid: landmarkStatus?.landmark_is_valid ?? resp.is_landmark_valid ?? null,
+        face_match: step2?.is_identical ?? resp.is_facematch ?? null,
+        face_match_score: step2?.percentage ?? resp.face_match_score ?? resp.facematch_score ?? null,
+        liveness_passed: step2?.status ?? resp.is_liveness ?? null,
+      };
     }
 
     // Include document URLs if completed (references to our proxy endpoint)
