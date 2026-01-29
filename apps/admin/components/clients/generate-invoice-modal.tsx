@@ -117,7 +117,24 @@ export function GenerateInvoiceModal({
 
   const handleCleanup = async () => {
     try {
-      const result = await apiClient<{ deleted: number; invoices: string[] }>(
+      // First check what stuck invoices exist
+      const check = await apiClient<{ count: number; invoices: Array<{ id: string; invoice_number: string; status: string; s3_key: string }> }>(
+        `/api/admin/clients/${clientId}/invoices/cleanup`,
+        { method: "GET" }
+      );
+      
+      if (check.count === 0) {
+        toast.info("No stuck invoices found");
+        return;
+      }
+
+      // Show what we found and confirm deletion
+      const invoiceList = check.invoices.map(inv => `${inv.invoice_number} (status: ${inv.status}, has PDF: ${inv.s3_key ? 'yes' : 'no'})`).join('\n');
+      const confirmed = window.confirm(`Found ${check.count} stuck invoice(s):\n\n${invoiceList}\n\nDelete these invoices?`);
+      
+      if (!confirmed) return;
+
+      const result = await apiClient<{ deleted: number; invoices: Array<{ number: string; status: string }> }>(
         `/api/admin/clients/${clientId}/invoices/cleanup`,
         { method: "DELETE" }
       );
