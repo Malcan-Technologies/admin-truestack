@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -12,7 +12,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Key, CreditCard, FileCheck, Copy, Eye, EyeOff, Ban, DollarSign, Plus, Trash2, RefreshCw, CheckCircle, XCircle, Clock, AlertCircle, ChevronLeft, ChevronRight, FileText, Download } from "lucide-react";
+import { Key, CreditCard, FileCheck, Copy, Eye, EyeOff, Ban, DollarSign, Plus, Trash2, RefreshCw, CheckCircle, XCircle, Clock, AlertCircle, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, FileText, Download, Receipt } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -124,6 +124,18 @@ type Invoice = {
   generated_by_name: string | null;
 };
 
+type Payment = {
+  id: string;
+  receipt_number: string;
+  amount_credits: number;
+  amount_myr: string;
+  payment_date: string;
+  payment_method: string | null;
+  payment_reference: string | null;
+  recorded_by_name: string | null;
+  receiptUrl: string | null;
+};
+
 interface ClientDetailTabsProps {
   client: Client;
 }
@@ -162,6 +174,9 @@ export function ClientDetailTabs({ client }: ClientDetailTabsProps) {
   const [generateInvoiceModalOpen, setGenerateInvoiceModalOpen] = useState(false);
   const [recordPaymentModalOpen, setRecordPaymentModalOpen] = useState(false);
   const [selectedInvoiceId, setSelectedInvoiceId] = useState<string | null>(null);
+  const [expandedInvoiceId, setExpandedInvoiceId] = useState<string | null>(null);
+  const [invoicePayments, setInvoicePayments] = useState<Record<string, Payment[]>>({});
+  const [loadingPayments, setLoadingPayments] = useState<string | null>(null);
 
   // Fetch KYC sessions
   const fetchKycSessions = useCallback(async (page = 1) => {
@@ -201,6 +216,41 @@ export function ClientDetailTabs({ client }: ClientDetailTabsProps) {
       setLoadingInvoices(false);
     }
   }, [client.id]);
+
+  // Fetch payments for an invoice
+  const fetchPayments = useCallback(async (invoiceId: string) => {
+    setLoadingPayments(invoiceId);
+    try {
+      const data = await apiClient<{ payments: Payment[] }>(
+        `/api/admin/clients/${client.id}/invoices/${invoiceId}/payments`
+      );
+      setInvoicePayments(prev => ({ ...prev, [invoiceId]: data.payments }));
+    } catch (error) {
+      console.error("Error fetching payments:", error);
+      toast.error("Failed to load payments");
+    } finally {
+      setLoadingPayments(null);
+    }
+  }, [client.id]);
+
+  const toggleInvoicePayments = (invoiceId: string) => {
+    if (expandedInvoiceId === invoiceId) {
+      setExpandedInvoiceId(null);
+    } else {
+      setExpandedInvoiceId(invoiceId);
+      if (!invoicePayments[invoiceId]) {
+        fetchPayments(invoiceId);
+      }
+    }
+  };
+
+  const downloadReceiptPdf = (receiptUrl: string | null) => {
+    if (receiptUrl) {
+      window.open(receiptUrl, "_blank");
+    } else {
+      toast.error("Receipt not available");
+    }
+  };
 
   const openRecordPayment = (invoiceId: string) => {
     setSelectedInvoiceId(invoiceId);
@@ -891,7 +941,7 @@ export function ClientDetailTabs({ client }: ClientDetailTabsProps) {
                 <Button
                   size="sm"
                   onClick={() => setGenerateInvoiceModalOpen(true)}
-                  className="bg-gradient-to-r from-indigo-500 to-violet-500 text-white hover:from-indigo-600 hover:to-violet-600"
+                  className="bg-linear-to-r from-indigo-500 to-violet-500 text-white hover:from-indigo-600 hover:to-violet-600"
                 >
                   <FileText className="mr-2 h-4 w-4" />
                   Generate Invoice
@@ -926,7 +976,8 @@ export function ClientDetailTabs({ client }: ClientDetailTabsProps) {
                   </TableHeader>
                   <TableBody>
                     {invoices.map((invoice) => (
-                      <TableRow key={invoice.id} className="border-slate-800">
+                      <React.Fragment key={invoice.id}>
+                      <TableRow className="border-slate-800">
                         <TableCell className="font-mono text-sm text-slate-300">
                           {invoice.invoice_number}
                         </TableCell>
@@ -958,10 +1009,25 @@ export function ClientDetailTabs({ client }: ClientDetailTabsProps) {
                               size="icon"
                               onClick={() => downloadInvoicePdf(invoice.id)}
                               className="h-8 w-8 text-slate-400 hover:text-white"
-                              title="Download PDF"
+                              title="Download Invoice PDF"
                             >
                               <Download className="h-4 w-4" />
                             </Button>
+                            {(invoice.status === "paid" || invoice.status === "partial" || invoice.amount_paid_credits > 0) && (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => toggleInvoicePayments(invoice.id)}
+                                className="h-8 w-8 text-slate-400 hover:text-white"
+                                title="View Receipts"
+                              >
+                                {expandedInvoiceId === invoice.id ? (
+                                  <ChevronUp className="h-4 w-4" />
+                                ) : (
+                                  <Receipt className="h-4 w-4" />
+                                )}
+                              </Button>
+                            )}
                             {(invoice.status === "generated" || invoice.status === "partial") && (
                               <Button
                                 variant="ghost"
@@ -976,6 +1042,69 @@ export function ClientDetailTabs({ client }: ClientDetailTabsProps) {
                           </div>
                         </TableCell>
                       </TableRow>
+                      {/* Expandable payments row */}
+                      {expandedInvoiceId === invoice.id && (
+                        <TableRow className="border-slate-800 bg-slate-800/30">
+                          <TableCell colSpan={7} className="p-4">
+                            <div className="space-y-3">
+                              <h4 className="text-sm font-medium text-slate-300 flex items-center gap-2">
+                                <Receipt className="h-4 w-4" />
+                                Payment History
+                              </h4>
+                              {loadingPayments === invoice.id ? (
+                                <div className="flex items-center gap-2 text-slate-400 text-sm">
+                                  <RefreshCw className="h-4 w-4 animate-spin" />
+                                  Loading payments...
+                                </div>
+                              ) : invoicePayments[invoice.id]?.length === 0 ? (
+                                <p className="text-sm text-slate-500">No payments recorded</p>
+                              ) : (
+                                <div className="space-y-2">
+                                  {invoicePayments[invoice.id]?.map((payment) => (
+                                    <div
+                                      key={payment.id}
+                                      className="flex items-center justify-between rounded-lg border border-slate-700 bg-slate-800/50 p-3"
+                                    >
+                                      <div className="flex items-center gap-4">
+                                        <div>
+                                          <p className="text-sm font-medium text-slate-300">
+                                            {payment.receipt_number}
+                                          </p>
+                                          <p className="text-xs text-slate-500">
+                                            {formatDate(payment.payment_date)}
+                                            {payment.payment_method && ` • ${payment.payment_method.replace("_", " ")}`}
+                                            {payment.payment_reference && ` • Ref: ${payment.payment_reference}`}
+                                          </p>
+                                        </div>
+                                      </div>
+                                      <div className="flex items-center gap-4">
+                                        <div className="text-right">
+                                          <p className="text-sm font-medium text-green-400">
+                                            RM {parseFloat(payment.amount_myr).toFixed(2)}
+                                          </p>
+                                          <p className="text-xs text-slate-500">
+                                            {payment.amount_credits.toLocaleString()} credits
+                                          </p>
+                                        </div>
+                                        <Button
+                                          variant="ghost"
+                                          size="icon"
+                                          onClick={() => downloadReceiptPdf(payment.receiptUrl)}
+                                          className="h-8 w-8 text-slate-400 hover:text-white"
+                                          title="Download Receipt"
+                                        >
+                                          <Download className="h-4 w-4" />
+                                        </Button>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      )}
+                    </React.Fragment>
                     ))}
                   </TableBody>
                 </Table>
@@ -992,11 +1121,35 @@ export function ClientDetailTabs({ client }: ClientDetailTabsProps) {
                   View credit transactions and top-up history.
                 </CardDescription>
               </div>
-              <TopupCreditsModal
-                clientId={client.id}
-                clientName={client.name}
-                currentBalance={creditBalance}
-              />
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setLoadingCredits(true);
+                    apiClient<{ balance: number; entries: CreditEntry[] }>(
+                      `/api/admin/clients/${client.id}/credits`
+                    )
+                      .then((data) => {
+                        setCreditBalance(data.balance);
+                        setCreditEntries(data.entries);
+                        toast.success("Credit ledger refreshed");
+                      })
+                      .catch(console.error)
+                      .finally(() => setLoadingCredits(false));
+                  }}
+                  disabled={loadingCredits}
+                  className="border-slate-700 bg-transparent text-slate-300 hover:bg-slate-800 hover:text-white"
+                >
+                  <RefreshCw className={`mr-2 h-4 w-4 ${loadingCredits ? "animate-spin" : ""}`} />
+                  Refresh
+                </Button>
+                <TopupCreditsModal
+                  clientId={client.id}
+                  clientName={client.name}
+                  currentBalance={creditBalance}
+                />
+              </div>
             </CardHeader>
             <CardContent>
               <div className="mb-6 rounded-lg border border-slate-700 bg-slate-800/50 p-4">
@@ -1037,7 +1190,7 @@ export function ClientDetailTabs({ client }: ClientDetailTabsProps) {
                     {creditEntries.map((entry) => (
                       <TableRow key={entry.id} className="border-slate-800">
                         <TableCell className="text-slate-400">
-                          {formatDate(entry.created_at)}
+                          {formatDateTime(entry.created_at)}
                         </TableCell>
                         <TableCell>
                           <Badge
@@ -1179,7 +1332,7 @@ export function ClientDetailTabs({ client }: ClientDetailTabsProps) {
                 size="sm"
                 onClick={savePricingTiers}
                 disabled={savingPricing || pricingTiers.length === 0}
-                className="bg-gradient-to-r from-indigo-500 to-violet-500 text-white hover:from-indigo-600 hover:to-violet-600"
+                className="bg-linear-to-r from-indigo-500 to-violet-500 text-white hover:from-indigo-600 hover:to-violet-600"
               >
                 {savingPricing ? "Saving..." : "Save Pricing"}
               </Button>

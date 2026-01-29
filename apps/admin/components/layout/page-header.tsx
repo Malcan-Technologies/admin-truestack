@@ -11,7 +11,7 @@ export function PageHeader({ title, description, children, actions }: PageHeader
     <div className="mb-8 flex items-start justify-between">
       <div>
         <h1 className="font-display text-3xl font-semibold tracking-tight md:text-4xl">
-          <span className="bg-gradient-to-r from-indigo-400 via-violet-400 to-purple-400 bg-clip-text text-transparent">
+          <span className="bg-linear-to-r from-indigo-400 via-violet-400 to-purple-400 bg-clip-text text-transparent">
             {title}
           </span>
         </h1>

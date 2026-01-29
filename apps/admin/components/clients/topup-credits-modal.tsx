@@ -137,7 +137,7 @@ export function TopupCreditsModal({
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogTrigger asChild>
         {trigger || (
-          <Button className="bg-gradient-to-r from-indigo-500 to-violet-500 text-white hover:from-indigo-600 hover:to-violet-600">
+          <Button className="bg-linear-to-r from-indigo-500 to-violet-500 text-white hover:from-indigo-600 hover:to-violet-600">
             <CreditCard className="mr-2 h-4 w-4" />
             Top Up Credits
           </Button>
@@ -311,7 +311,7 @@ export function TopupCreditsModal({
               <Button
                 type="submit"
                 disabled={loading}
-                className="bg-gradient-to-r from-indigo-500 to-violet-500 text-white hover:from-indigo-600 hover:to-violet-600"
+                className="bg-linear-to-r from-indigo-500 to-violet-500 text-white hover:from-indigo-600 hover:to-violet-600"
               >
                 {loading ? (
                   <>

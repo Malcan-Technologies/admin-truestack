@@ -2,6 +2,8 @@ import { query, queryOne } from "./db";
 import { generateInvoicePDF, generateReceiptPDF, InvoiceData, ReceiptData } from "./pdf";
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 import { getPresignedUrl } from "./s3";
+import * as fs from "fs";
+import * as path from "path";
 
 // ============================================
 // Types
@@ -67,6 +69,47 @@ const TIMEZONE = "Asia/Kuala_Lumpur";
 const PAYMENT_TERMS_DAYS = 14;
 const CREDITS_PER_MYR = 10;
 const S3_BUCKET = process.env.S3_KYC_BUCKET || "trueidentity-kyc-documents-dev";
+const IS_DEV = process.env.NODE_ENV === "development";
+const LOCAL_INVOICE_DIR = process.cwd(); // s3_key already includes "invoices/" prefix
+
+// ============================================
+// Malaysia Timezone Helpers
+// ============================================
+
+const MALAYSIA_OFFSET_MS = 8 * 60 * 60 * 1000; // UTC+8
+
+/**
+ * Get the start of today in Malaysia timezone as a UTC Date.
+ * For example, if it's Jan 29 1PM in Malaysia, this returns
+ * Jan 28 16:00:00 UTC (which is Jan 29 00:00:00 Malaysia time).
+ */
+function getMalaysiaTodayStartUTC(): Date {
+  const now = new Date();
+  // Get the current time in Malaysia
+  const malaysiaTime = new Date(now.getTime() + MALAYSIA_OFFSET_MS);
+  // Get just the date part (midnight Malaysia)
+  const malaysiaDateStr = malaysiaTime.toISOString().split("T")[0];
+  // Parse as UTC and subtract offset to get the UTC equivalent of Malaysia midnight
+  const midnightMalaysiaAsUTC = new Date(malaysiaDateStr + "T00:00:00.000Z");
+  return new Date(midnightMalaysiaAsUTC.getTime() - MALAYSIA_OFFSET_MS);
+}
+
+/**
+ * Get the start of yesterday in Malaysia timezone as a UTC Date.
+ * This is the billing period end date for manual invoice generation.
+ */
+function getMalaysiaYesterdayStartUTC(): Date {
+  const todayStart = getMalaysiaTodayStartUTC();
+  return new Date(todayStart.getTime() - 24 * 60 * 60 * 1000);
+}
+
+/**
+ * Get the end of yesterday (23:59:59.999) in Malaysia timezone as a UTC Date.
+ */
+function getMalaysiaYesterdayEndUTC(): Date {
+  const todayStart = getMalaysiaTodayStartUTC();
+  return new Date(todayStart.getTime() - 1); // 1ms before today starts
+}
 
 // ============================================
 // S3 Client
@@ -75,6 +118,35 @@ const S3_BUCKET = process.env.S3_KYC_BUCKET || "trueidentity-kyc-documents-dev";
 const s3Client = new S3Client({
   region: process.env.AWS_REGION || "ap-southeast-5",
 });
+
+// ============================================
+// Local Storage Helper (for dev mode)
+// ============================================
+
+async function saveToLocalStorage(key: string, buffer: Buffer): Promise<void> {
+  const filePath = path.join(LOCAL_INVOICE_DIR, key);
+  const dir = path.dirname(filePath);
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
+  }
+  fs.writeFileSync(filePath, buffer);
+}
+
+async function uploadPdf(s3Key: string, pdfBuffer: Buffer): Promise<void> {
+  if (IS_DEV) {
+    // In dev mode, store locally instead of S3
+    console.log(`[Dev Mode] Storing PDF locally: ${s3Key}`);
+    await saveToLocalStorage(s3Key, pdfBuffer);
+  } else {
+    // Production: upload to S3
+    await s3Client.send(new PutObjectCommand({
+      Bucket: S3_BUCKET,
+      Key: s3Key,
+      Body: pdfBuffer,
+      ContentType: "application/pdf",
+    }));
+  }
+}
 
 // ============================================
 // Invoice Number Generation
@@ -284,12 +356,8 @@ export async function generateInvoice(
   clientId: string,
   options: InvoiceGenerationOptions = {}
 ): Promise<GeneratedInvoice> {
-  // Default end date is yesterday
-  const endDate = options.endDate || (() => {
-    const yesterday = new Date();
-    yesterday.setDate(yesterday.getDate() - 1);
-    return yesterday;
-  })();
+  // Default end date is yesterday (Malaysia timezone)
+  const endDate = options.endDate || getMalaysiaYesterdayEndUTC();
 
   // Calculate billing period
   const { periodStart, periodEnd } = await calculateBillingPeriod(clientId, endDate);
@@ -331,10 +399,9 @@ export async function generateInvoice(
   // Generate invoice number
   const invoiceNumber = await getNextInvoiceNumber();
 
-  // Calculate due date (14 days from now)
-  const now = new Date();
-  const dueDate = new Date(now);
-  dueDate.setDate(dueDate.getDate() + PAYMENT_TERMS_DAYS);
+  // Calculate due date (14 days from now in Malaysia timezone)
+  const todayStart = getMalaysiaTodayStartUTC();
+  const dueDate = new Date(todayStart.getTime() + PAYMENT_TERMS_DAYS * 24 * 60 * 60 * 1000);
 
   // First, clean up any failed/pending invoices for this client
   await query(`
@@ -421,7 +488,7 @@ export async function generateInvoice(
   // Prepare PDF data
   const pdfData: InvoiceData = {
     invoiceNumber,
-    generatedAt: now,
+    generatedAt: new Date(),
     dueDate,
     periodStart,
     periodEnd,
@@ -457,24 +524,20 @@ export async function generateInvoice(
     },
   };
 
-  // Generate PDF and upload to S3
+  // Generate PDF and upload/store
   try {
     const pdfBuffer = await generateInvoicePDF(pdfData);
 
-    // Upload to S3
-    await s3Client.send(new PutObjectCommand({
-      Bucket: S3_BUCKET,
-      Key: s3Key,
-      Body: pdfBuffer,
-      ContentType: "application/pdf",
-    }));
+    // Upload to S3 or store locally in dev
+    await uploadPdf(s3Key, pdfBuffer);
 
-    // Update invoice to 'generated' status with s3_key
+    // Update invoice status - auto-mark as paid if amount due is 0
+    const finalStatus = amountDueCredits === 0 ? "paid" : "generated";
     await query(`
       UPDATE invoice 
-      SET status = 'generated', s3_key = $1, updated_at = NOW()
-      WHERE id = $2
-    `, [s3Key, invoiceId]);
+      SET status = $1, s3_key = $2, updated_at = NOW()
+      WHERE id = $3
+    `, [finalStatus, s3Key, invoiceId]);
 
   } catch (pdfError) {
     // Clean up the failed invoice record
@@ -482,6 +545,9 @@ export async function generateInvoice(
     await query(`DELETE FROM invoice WHERE id = $1`, [invoiceId]);
     throw pdfError;
   }
+
+  // Return final status
+  const finalStatus = amountDueCredits === 0 ? "paid" : "generated";
 
   return {
     id: invoiceId,
@@ -494,7 +560,7 @@ export async function generateInvoice(
     amountDueCredits,
     amountDueMyr,
     s3Key,
-    status: "generated",
+    status: finalStatus,
   };
 }
 
@@ -531,9 +597,13 @@ export async function recordPayment(
   const amountPaid = parseInt(invoice.amount_paid_credits, 10);
   const remainingDue = amountDue - amountPaid;
 
-  // Cap payment at remaining amount
-  const paymentAmount = Math.min(payment.amountCredits, remainingDue);
+  // Allow overpayment - excess will be credited to client
+  const paymentAmount = payment.amountCredits;
   const paymentMyr = paymentAmount / CREDITS_PER_MYR;
+  
+  // Calculate how much goes to invoice vs excess credit
+  const invoicePayment = Math.min(paymentAmount, remainingDue);
+  const excessCredit = Math.max(0, paymentAmount - remainingDue);
 
   // Get client details
   const client = await queryOne<{ name: string; code: string }>(`
@@ -579,8 +649,8 @@ export async function recordPayment(
   // Update s3_key
   await query(`UPDATE payment SET s3_key = $1 WHERE id = $2`, [s3Key, paymentId]);
 
-  // Update invoice
-  const newAmountPaid = amountPaid + paymentAmount;
+  // Update invoice - only count the portion that applies to the invoice
+  const newAmountPaid = amountPaid + invoicePayment;
   const newStatus = newAmountPaid >= amountDue ? "paid" : "partial";
 
   await query(`
@@ -592,24 +662,45 @@ export async function recordPayment(
     WHERE id = $4
   `, [newAmountPaid, newAmountPaid / CREDITS_PER_MYR, newStatus, invoiceId]);
 
-  // Add credits to ledger
+  // Add credits to ledger - full payment amount is credited
   const currentBalance = await getClientBalance(invoice.client_id);
   const newBalance = currentBalance + paymentAmount;
 
-  await query(`
-    INSERT INTO credit_ledger (
-      client_id, product_id, amount, balance_after, type, reference_id, description, created_by
-    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-  `, [
-    invoice.client_id,
-    "true_identity", // Default product for payments
-    paymentAmount,
-    newBalance,
-    "payment",
-    paymentId,
-    `Payment for ${invoice.invoice_number}`,
-    payment.recordedBy || null,
-  ]);
+  // Create ledger entry for invoice payment portion
+  if (invoicePayment > 0) {
+    await query(`
+      INSERT INTO credit_ledger (
+        client_id, product_id, amount, balance_after, type, reference_id, description, created_by
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+    `, [
+      invoice.client_id,
+      "true_identity",
+      invoicePayment,
+      currentBalance + invoicePayment,
+      "payment",
+      paymentId,
+      `Payment for ${invoice.invoice_number}`,
+      payment.recordedBy || null,
+    ]);
+  }
+
+  // Create separate ledger entry for excess credit (overpayment)
+  if (excessCredit > 0) {
+    await query(`
+      INSERT INTO credit_ledger (
+        client_id, product_id, amount, balance_after, type, reference_id, description, created_by
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+    `, [
+      invoice.client_id,
+      "true_identity",
+      excessCredit,
+      newBalance,
+      "topup",
+      paymentId,
+      `Overpayment credit from ${invoice.invoice_number}`,
+      payment.recordedBy || null,
+    ]);
+  }
 
   // Generate receipt PDF
   const receiptData: ReceiptData = {
@@ -631,13 +722,8 @@ export async function recordPayment(
 
   const receiptBuffer = await generateReceiptPDF(receiptData);
 
-  // Upload to S3
-  await s3Client.send(new PutObjectCommand({
-    Bucket: S3_BUCKET,
-    Key: s3Key,
-    Body: receiptBuffer,
-    ContentType: "application/pdf",
-  }));
+  // Upload to S3 or store locally in dev
+  await uploadPdf(s3Key, receiptBuffer);
 
   return {
     id: paymentId,
@@ -663,6 +749,12 @@ export async function getInvoicePdfUrl(invoiceId: string): Promise<string> {
     throw new Error(`Invoice not found: ${invoiceId}`);
   }
 
+  if (IS_DEV) {
+    // In dev mode, return absolute URL with backend origin
+    const baseUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+    return `${baseUrl}/api/invoices/file/${invoice.s3_key}`;
+  }
+
   return getPresignedUrl(invoice.s3_key);
 }
 
@@ -677,6 +769,12 @@ export async function getReceiptPdfUrl(paymentId: string): Promise<string> {
 
   if (!payment) {
     throw new Error(`Payment not found: ${paymentId}`);
+  }
+
+  if (IS_DEV) {
+    // In dev mode, return absolute URL with backend origin
+    const baseUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+    return `${baseUrl}/api/invoices/file/${payment.s3_key}`;
   }
 
   return getPresignedUrl(payment.s3_key);
@@ -696,9 +794,17 @@ export async function generateAllMonthlyInvoices(): Promise<{
     SELECT id, name FROM client WHERE status = 'active'
   `);
 
-  // Calculate end date (last day of previous month)
-  const now = new Date();
-  const lastDayPrevMonth = new Date(now.getFullYear(), now.getMonth(), 0);
+  // Calculate end date (last day of previous month in Malaysia timezone)
+  // Get today in Malaysia, then find last day of previous month
+  const todayMalaysia = getMalaysiaTodayStartUTC();
+  // Add offset to get Malaysia local date components
+  const malaysiaLocal = new Date(todayMalaysia.getTime() + MALAYSIA_OFFSET_MS);
+  // Last day of previous month = day 0 of current month
+  const lastDayPrevMonthLocal = new Date(malaysiaLocal.getFullYear(), malaysiaLocal.getMonth(), 0);
+  // Convert back to UTC by subtracting offset and setting to end of day (23:59:59.999 Malaysia)
+  const lastDayPrevMonthUTC = new Date(
+    Date.UTC(lastDayPrevMonthLocal.getFullYear(), lastDayPrevMonthLocal.getMonth(), lastDayPrevMonthLocal.getDate(), 23, 59, 59, 999) - MALAYSIA_OFFSET_MS
+  );
 
   const results = {
     success: 0,
@@ -708,7 +814,7 @@ export async function generateAllMonthlyInvoices(): Promise<{
 
   for (const client of clients) {
     try {
-      await generateInvoice(client.id, { endDate: lastDayPrevMonth });
+      await generateInvoice(client.id, { endDate: lastDayPrevMonthUTC });
       results.success++;
     } catch (error) {
       results.failed++;

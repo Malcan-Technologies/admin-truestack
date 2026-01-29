@@ -109,14 +109,26 @@ export function RecordPaymentModal({
     if (!invoiceId || !invoice) return;
 
     const amount = parseFloat(amountMyr);
-    if (isNaN(amount) || amount <= 0) {
+    if (isNaN(amount) || amount < 0) {
       toast.error("Please enter a valid amount");
       return;
     }
 
-    if (amount > remainingMyr) {
-      toast.error(`Amount cannot exceed remaining balance of RM ${remainingMyr.toFixed(2)}`);
+    // For zero-amount invoices, allow 0 payment
+    // For other invoices, require positive amount
+    if (remainingMyr > 0 && amount <= 0) {
+      toast.error("Please enter an amount greater than 0");
       return;
+    }
+
+    // Allow overpayment - excess will be credited to the client
+    if (amount > remainingMyr && remainingMyr > 0) {
+      const excess = amount - remainingMyr;
+      const confirmOverpay = window.confirm(
+        `This payment exceeds the remaining balance by RM ${excess.toFixed(2)}. ` +
+        `The excess will be credited to the client's account. Continue?`
+      );
+      if (!confirmOverpay) return;
     }
 
     if (!paymentDate) {
@@ -202,13 +214,12 @@ export function RecordPaymentModal({
                 id="amount"
                 type="number"
                 step="0.01"
-                min="0.01"
-                max={remainingMyr}
+                min={remainingMyr === 0 ? "0" : "0.01"}
                 value={amountMyr}
                 onChange={(e) => setAmountMyr(e.target.value)}
-                placeholder={`Max: ${remainingMyr.toFixed(2)}`}
+                placeholder={remainingMyr > 0 ? `Remaining: RM ${remainingMyr.toFixed(2)}` : "RM 0.00"}
                 className="border-slate-700 bg-slate-800 text-white"
-                required
+                required={remainingMyr > 0}
               />
               <p className="text-xs text-slate-500">
                 {amountMyr && !isNaN(parseFloat(amountMyr))
@@ -295,7 +306,7 @@ export function RecordPaymentModal({
               <Button
                 type="submit"
                 disabled={submitting}
-                className="bg-gradient-to-r from-green-500 to-emerald-500 text-white hover:from-green-600 hover:to-emerald-600"
+                className="bg-linear-to-r from-green-500 to-emerald-500 text-white hover:from-green-600 hover:to-emerald-600"
               >
                 {submitting ? (
                   <>

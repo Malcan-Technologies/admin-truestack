@@ -58,3 +58,7 @@ secrets/
 # IDE
 .idea/
 .vscode/
+
+# Local dev invoices and receipts
+invoices/
+receipts/

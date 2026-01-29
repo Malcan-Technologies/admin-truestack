@@ -287,7 +287,7 @@ export function GenerateInvoiceModal({
           <Button
             onClick={handleGenerate}
             disabled={!canGenerate || generating}
-            className="bg-gradient-to-r from-indigo-500 to-violet-500 text-white hover:from-indigo-600 hover:to-violet-600"
+            className="bg-linear-to-r from-indigo-500 to-violet-500 text-white hover:from-indigo-600 hover:to-violet-600"
           >
             {generating ? (
               <>

@@ -176,7 +176,7 @@ export default function DashboardPage() {
       {/* TrueIdentity Section */}
       <div className="mb-8">
         <div className="mb-4 flex items-center gap-2">
-          <div className="h-8 w-1 rounded-full bg-gradient-to-b from-indigo-500 to-violet-500" />
+          <div className="h-8 w-1 rounded-full bg-linear-to-b from-indigo-500 to-violet-500" />
           <h2 className="text-xl font-semibold text-white">TrueIdentity</h2>
         </div>
 

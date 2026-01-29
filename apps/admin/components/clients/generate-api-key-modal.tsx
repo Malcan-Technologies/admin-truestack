@@ -105,7 +105,7 @@ export function GenerateApiKeyModal({ clientId, trigger, onKeyGenerated }: Gener
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogTrigger asChild>
         {trigger || (
-          <Button className="bg-gradient-to-r from-indigo-500 to-violet-500 text-white hover:from-indigo-600 hover:to-violet-600">
+          <Button className="bg-linear-to-r from-indigo-500 to-violet-500 text-white hover:from-indigo-600 hover:to-violet-600">
             <Key className="mr-2 h-4 w-4" />
             Generate Key
           </Button>
@@ -163,7 +163,7 @@ export function GenerateApiKeyModal({ clientId, trigger, onKeyGenerated }: Gener
             <div className="flex justify-end pt-4">
               <Button
                 onClick={handleClose}
-                className="bg-gradient-to-r from-indigo-500 to-violet-500 text-white hover:from-indigo-600 hover:to-violet-600"
+                className="bg-linear-to-r from-indigo-500 to-violet-500 text-white hover:from-indigo-600 hover:to-violet-600"
               >
                 Done
               </Button>
@@ -218,7 +218,7 @@ export function GenerateApiKeyModal({ clientId, trigger, onKeyGenerated }: Gener
               <Button
                 type="submit"
                 disabled={loading}
-                className="bg-gradient-to-r from-indigo-500 to-violet-500 text-white hover:from-indigo-600 hover:to-violet-600"
+                className="bg-linear-to-r from-indigo-500 to-violet-500 text-white hover:from-indigo-600 hover:to-violet-600"
               >
                 {loading ? (
                   <>

@@ -117,7 +117,7 @@ export function ClientsList({ clients: initialClients }: ClientsListProps) {
             <div className="mt-4">
               <NewClientModal
                 trigger={
-                  <Button className="bg-gradient-to-r from-indigo-500 to-violet-500 text-white hover:from-indigo-600 hover:to-violet-600">
+                  <Button className="bg-linear-to-r from-indigo-500 to-violet-500 text-white hover:from-indigo-600 hover:to-violet-600">
                     <Plus className="mr-2 h-4 w-4" />
                     Create First Client
                   </Button>

@@ -602,7 +602,7 @@ export default function TrueIdentityDemoPage() {
       {/* Header */}
       <div>
         <h1 className="font-display text-3xl font-semibold tracking-tight md:text-4xl">
-          <span className="bg-gradient-to-r from-indigo-400 via-violet-400 to-purple-400 bg-clip-text text-transparent">
+          <span className="bg-linear-to-r from-indigo-400 via-violet-400 to-purple-400 bg-clip-text text-transparent">
             TrueIdentity Demo
           </span>
         </h1>
@@ -723,7 +723,7 @@ export default function TrueIdentityDemoPage() {
                 size="sm"
                 onClick={topUpCredits}
                 disabled={toppingUp}
-                className="bg-gradient-to-r from-indigo-500 to-violet-500 text-white hover:from-indigo-600 hover:to-violet-600"
+                className="bg-linear-to-r from-indigo-500 to-violet-500 text-white hover:from-indigo-600 hover:to-violet-600"
               >
                 <Plus className="mr-1 h-4 w-4" />
                 {toppingUp ? "..." : "Add"}
@@ -926,7 +926,7 @@ export default function TrueIdentityDemoPage() {
                 <Button
                   onClick={createKycSession}
                   disabled={creatingSession || !demoData?.apiKey || (!demoData.allowOverdraft && demoData.creditBalance < 1)}
-                  className="w-full bg-gradient-to-r from-indigo-500 to-violet-500 text-white hover:from-indigo-600 hover:to-violet-600"
+                  className="w-full bg-linear-to-r from-indigo-500 to-violet-500 text-white hover:from-indigo-600 hover:to-violet-600"
                 >
                   {creatingSession ? (
                     <>
@@ -1010,7 +1010,7 @@ export default function TrueIdentityDemoPage() {
                     <div className="flex gap-2">
                       <Button
                         onClick={openKycUrl}
-                        className="flex-1 bg-gradient-to-r from-indigo-500 to-violet-500 text-white hover:from-indigo-600 hover:to-violet-600"
+                        className="flex-1 bg-linear-to-r from-indigo-500 to-violet-500 text-white hover:from-indigo-600 hover:to-violet-600"
                       >
                         <ExternalLink className="mr-2 h-4 w-4" />
                         Open KYC URL

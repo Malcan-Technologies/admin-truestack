@@ -29,11 +29,10 @@
     "@prisma/adapter-pg": "^7.3.0",
     "@prisma/client": "7.3.0",
     "better-auth": "^1.4.17",
-    "pdfkit": "^0.17.2",
+    "pdf-lib": "^1.17.1",
     "pg": "^8.17.2"
   },
   "devDependencies": {
-    "@types/pdfkit": "^0.17.4",
     "@types/pg": "^8.16.0",
     "prisma": "7.3.0",
     "tsx": "^4.19.0",

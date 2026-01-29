@@ -28,13 +28,19 @@ export async function GET(
       return NextResponse.json({ error: "Client not found" }, { status: 404 });
     }
 
-    // Calculate end date (default to yesterday)
+    // Calculate end date (default to yesterday in Malaysia timezone)
     let endDate: Date;
     if (endDateParam) {
       endDate = new Date(endDateParam);
     } else {
-      endDate = new Date();
-      endDate.setDate(endDate.getDate() - 1);
+      // Get yesterday end (23:59:59.999) in Malaysia timezone as UTC
+      const MALAYSIA_OFFSET_MS = 8 * 60 * 60 * 1000;
+      const now = new Date();
+      const malaysiaTime = new Date(now.getTime() + MALAYSIA_OFFSET_MS);
+      const malaysiaDateStr = malaysiaTime.toISOString().split("T")[0];
+      const midnightMalaysiaAsUTC = new Date(malaysiaDateStr + "T00:00:00.000Z");
+      const todayStartUTC = new Date(midnightMalaysiaAsUTC.getTime() - MALAYSIA_OFFSET_MS);
+      endDate = new Date(todayStartUTC.getTime() - 1); // End of yesterday (1ms before today)
     }
 
     // Get billing period

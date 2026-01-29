@@ -362,7 +362,7 @@ export default function SettingsPage() {
                   disabled={
                     loading || !currentPassword || !newPassword || !confirmPassword
                   }
-                  className="bg-gradient-to-r from-indigo-500 to-violet-500 text-white hover:from-indigo-600 hover:to-violet-600 disabled:from-slate-700 disabled:to-slate-700 disabled:text-slate-400 disabled:opacity-100"
+                  className="bg-linear-to-r from-indigo-500 to-violet-500 text-white hover:from-indigo-600 hover:to-violet-600 disabled:from-slate-700 disabled:to-slate-700 disabled:text-slate-400 disabled:opacity-100"
                 >
                   {loading ? (
                     <>

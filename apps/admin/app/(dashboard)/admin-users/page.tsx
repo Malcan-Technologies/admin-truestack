@@ -234,7 +234,7 @@ export default function AdminUsersPage() {
       >
         <Dialog open={isCreateModalOpen} onOpenChange={setIsCreateModalOpen}>
           <DialogTrigger asChild>
-            <Button className="bg-gradient-to-r from-indigo-500 to-violet-500 text-white hover:from-indigo-600 hover:to-violet-600">
+            <Button className="bg-linear-to-r from-indigo-500 to-violet-500 text-white hover:from-indigo-600 hover:to-violet-600">
               <Plus className="mr-2 h-4 w-4" />
               Add Admin User
             </Button>
@@ -627,7 +627,7 @@ function CreateAdminUserModal({ onSuccess, onClose }: CreateAdminUserModalProps)
           <Button
             type="submit"
             disabled={loading || !name || !email || !password}
-            className="bg-gradient-to-r from-indigo-500 to-violet-500 text-white hover:from-indigo-600 hover:to-violet-600 disabled:from-slate-700 disabled:to-slate-700 disabled:text-slate-400 disabled:opacity-100"
+            className="bg-linear-to-r from-indigo-500 to-violet-500 text-white hover:from-indigo-600 hover:to-violet-600 disabled:from-slate-700 disabled:to-slate-700 disabled:text-slate-400 disabled:opacity-100"
           >
             {loading ? (
               <>
@@ -769,7 +769,7 @@ function EditUserModal({ user, onSuccess, onClose }: EditUserModalProps) {
           <Button
             type="submit"
             disabled={loading || !hasChanges || !name.trim()}
-            className="bg-gradient-to-r from-indigo-500 to-violet-500 text-white hover:from-indigo-600 hover:to-violet-600 disabled:from-slate-700 disabled:to-slate-700 disabled:text-slate-400 disabled:opacity-100"
+            className="bg-linear-to-r from-indigo-500 to-violet-500 text-white hover:from-indigo-600 hover:to-violet-600 disabled:from-slate-700 disabled:to-slate-700 disabled:text-slate-400 disabled:opacity-100"
           >
             {loading ? (
               <>
