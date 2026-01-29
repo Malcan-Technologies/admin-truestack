@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -12,7 +12,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Key, CreditCard, FileCheck, Copy, Eye, EyeOff, Ban, DollarSign, Plus, Trash2 } from "lucide-react";
+import { Key, CreditCard, FileCheck, Copy, Eye, EyeOff, Ban, DollarSign, Plus, Trash2, RefreshCw, CheckCircle, XCircle, Clock, AlertCircle, ChevronLeft, ChevronRight } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -28,6 +28,7 @@ import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { GenerateApiKeyModal } from "./generate-api-key-modal";
 import { TopupCreditsModal } from "./topup-credits-modal";
+import { KycSessionDetailModal } from "./kyc-session-detail-modal";
 import { apiClient } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -79,6 +80,31 @@ type PricingTier = {
   credits_per_session: number; // 10 credits = RM 1
 };
 
+type KycSession = {
+  id: string;
+  ref_id: string;
+  innovatif_ref_id: string | null;
+  status: string;
+  result: string | null;
+  reject_message: string | null;
+  document_name: string;
+  document_number: string;
+  document_type: string;
+  billed: boolean;
+  webhook_delivered: boolean;
+  webhook_delivered_at: string | null;
+  created_at: string;
+  updated_at: string;
+  expires_at: string | null;
+};
+
+type KycSessionsPagination = {
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+};
+
 interface ClientDetailTabsProps {
   client: Client;
 }
@@ -98,6 +124,95 @@ export function ClientDetailTabs({ client }: ClientDetailTabsProps) {
   const [currentMonthUsage, setCurrentMonthUsage] = useState(0);
   const [allowOverdraft, setAllowOverdraft] = useState(false);
   const [savingOverdraft, setSavingOverdraft] = useState(false);
+
+  // KYC Sessions state
+  const [kycSessions, setKycSessions] = useState<KycSession[]>([]);
+  const [kycSessionsPagination, setKycSessionsPagination] = useState<KycSessionsPagination>({
+    page: 1,
+    limit: 10,
+    total: 0,
+    totalPages: 0,
+  });
+  const [loadingKycSessions, setLoadingKycSessions] = useState(true);
+  const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
+  const [sessionModalOpen, setSessionModalOpen] = useState(false);
+
+  // Fetch KYC sessions
+  const fetchKycSessions = useCallback(async (page = 1) => {
+    setLoadingKycSessions(true);
+    try {
+      const data = await apiClient<{
+        sessions: KycSession[];
+        pagination: KycSessionsPagination;
+      }>(`/api/admin/clients/${client.id}/kyc-sessions?page=${page}&limit=10`);
+      setKycSessions(data.sessions);
+      setKycSessionsPagination(data.pagination);
+    } catch (error) {
+      console.error("Error fetching KYC sessions:", error);
+      toast.error("Failed to load KYC sessions");
+    } finally {
+      setLoadingKycSessions(false);
+    }
+  }, [client.id]);
+
+  const openSessionDetail = (sessionId: string) => {
+    setSelectedSessionId(sessionId);
+    setSessionModalOpen(true);
+  };
+
+  const getStatusIcon = (status: string, result: string | null) => {
+    if (status === "completed") {
+      if (result === "approved") {
+        return <CheckCircle className="h-4 w-4 text-green-400" />;
+      } else {
+        return <XCircle className="h-4 w-4 text-red-400" />;
+      }
+    }
+    if (status === "expired") {
+      return <AlertCircle className="h-4 w-4 text-orange-400" />;
+    }
+    return <Clock className="h-4 w-4 text-amber-400" />;
+  };
+
+  const getStatusBadge = (status: string, result: string | null) => {
+    if (status === "completed") {
+      return result === "approved" ? (
+        <Badge className="border-green-500/30 bg-green-500/10 text-green-400">
+          Approved
+        </Badge>
+      ) : (
+        <Badge className="border-red-500/30 bg-red-500/10 text-red-400">
+          Rejected
+        </Badge>
+      );
+    }
+    if (status === "pending") {
+      return (
+        <Badge className="border-amber-500/30 bg-amber-500/10 text-amber-400">
+          Pending
+        </Badge>
+      );
+    }
+    if (status === "processing") {
+      return (
+        <Badge className="border-blue-500/30 bg-blue-500/10 text-blue-400">
+          Processing
+        </Badge>
+      );
+    }
+    if (status === "expired") {
+      return (
+        <Badge className="border-orange-500/30 bg-orange-500/10 text-orange-400">
+          Expired
+        </Badge>
+      );
+    }
+    return (
+      <Badge className="border-slate-500/30 bg-slate-500/10 text-slate-400">
+        {status}
+      </Badge>
+    );
+  };
 
   const toggleKeyVisibility = (keyId: string) => {
     setRevealedKeys((prev) => {
@@ -230,7 +345,10 @@ export function ClientDetailTabs({ client }: ClientDetailTabsProps) {
       })
       .catch(console.error)
       .finally(() => setLoadingPricing(false));
-  }, [client.id]);
+
+    // Fetch KYC sessions
+    fetchKycSessions();
+  }, [client.id, fetchKycSessions]);
 
   return (
     <Tabs defaultValue="overview" className="space-y-6">
@@ -499,30 +617,159 @@ export function ClientDetailTabs({ client }: ClientDetailTabsProps) {
       <TabsContent value="true-identity">
         <div className="space-y-6">
           <Card className="border-slate-800 bg-slate-900/50">
-            <CardHeader>
-              <CardTitle className="text-white">TrueIdentity Configuration</CardTitle>
-              <CardDescription className="text-slate-400">
-                Configure webhook URLs and redirect settings for KYC sessions.
-              </CardDescription>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <div>
+                <CardTitle className="text-white">KYC Sessions</CardTitle>
+                <CardDescription className="text-slate-400">
+                  View all KYC verification sessions for this client.
+                </CardDescription>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => fetchKycSessions(kycSessionsPagination.page)}
+                disabled={loadingKycSessions}
+                className="border-slate-700 bg-transparent text-slate-300 hover:bg-slate-800 hover:text-white"
+              >
+                <RefreshCw className={`mr-2 h-4 w-4 ${loadingKycSessions ? "animate-spin" : ""}`} />
+                Refresh
+              </Button>
             </CardHeader>
             <CardContent>
-              <p className="text-sm text-slate-400">
-                Configuration options will be available here.
-              </p>
-            </CardContent>
-          </Card>
+              {loadingKycSessions ? (
+                <div className="flex items-center justify-center py-12">
+                  <RefreshCw className="h-8 w-8 text-slate-600 animate-spin" />
+                </div>
+              ) : kycSessions.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-12">
+                  <FileCheck className="h-12 w-12 text-slate-600 mb-4" />
+                  <p className="text-slate-400">No KYC sessions yet</p>
+                  <p className="text-sm text-slate-500">
+                    Sessions will appear here once the client starts using the API.
+                  </p>
+                </div>
+              ) : (
+                <>
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="border-slate-800 hover:bg-transparent">
+                        <TableHead className="text-slate-400">Status</TableHead>
+                        <TableHead className="text-slate-400">Ref ID</TableHead>
+                        <TableHead className="text-slate-400">Document</TableHead>
+                        <TableHead className="text-slate-400">Billed</TableHead>
+                        <TableHead className="text-slate-400">Created</TableHead>
+                        <TableHead className="text-right text-slate-400">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {kycSessions.map((session) => (
+                        <TableRow
+                          key={session.id}
+                          className="border-slate-800 cursor-pointer hover:bg-slate-800/50"
+                          onClick={() => openSessionDetail(session.id)}
+                        >
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              {getStatusIcon(session.status, session.result)}
+                              {getStatusBadge(session.status, session.result)}
+                            </div>
+                          </TableCell>
+                          <TableCell className="font-mono text-xs text-slate-300">
+                            {session.ref_id}
+                          </TableCell>
+                          <TableCell className="text-slate-300">
+                            <div>
+                              <p className="text-sm">{session.document_name}</p>
+                              <p className="text-xs text-slate-500 font-mono">
+                                {session.document_number}
+                              </p>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            {session.billed ? (
+                              <Badge className="border-green-500/30 bg-green-500/10 text-green-400">
+                                <DollarSign className="mr-1 h-3 w-3" />
+                                Yes
+                              </Badge>
+                            ) : (
+                              <Badge className="border-slate-500/30 bg-slate-500/10 text-slate-400">
+                                No
+                              </Badge>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-slate-400 text-sm">
+                            {new Date(session.created_at).toLocaleString()}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                openSessionDetail(session.id);
+                              }}
+                              className="text-slate-400 hover:text-white"
+                            >
+                              <Eye className="h-4 w-4" />
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
 
-          <Card className="border-slate-800 bg-slate-900/50">
-            <CardHeader>
-              <CardTitle className="text-white">Recent KYC Sessions</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-sm text-slate-400">
-                No sessions yet for this client.
-              </p>
+                  {/* Pagination */}
+                  {kycSessionsPagination.totalPages > 1 && (
+                    <div className="flex items-center justify-between mt-4 pt-4 border-t border-slate-800">
+                      <p className="text-sm text-slate-400">
+                        Showing {(kycSessionsPagination.page - 1) * kycSessionsPagination.limit + 1} to{" "}
+                        {Math.min(
+                          kycSessionsPagination.page * kycSessionsPagination.limit,
+                          kycSessionsPagination.total
+                        )}{" "}
+                        of {kycSessionsPagination.total} sessions
+                      </p>
+                      <div className="flex gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => fetchKycSessions(kycSessionsPagination.page - 1)}
+                          disabled={kycSessionsPagination.page <= 1 || loadingKycSessions}
+                          className="border-slate-700 bg-transparent text-slate-300 hover:bg-slate-800 hover:text-white"
+                        >
+                          <ChevronLeft className="h-4 w-4" />
+                        </Button>
+                        <span className="flex items-center px-3 text-sm text-slate-400">
+                          Page {kycSessionsPagination.page} of {kycSessionsPagination.totalPages}
+                        </span>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => fetchKycSessions(kycSessionsPagination.page + 1)}
+                          disabled={
+                            kycSessionsPagination.page >= kycSessionsPagination.totalPages ||
+                            loadingKycSessions
+                          }
+                          className="border-slate-700 bg-transparent text-slate-300 hover:bg-slate-800 hover:text-white"
+                        >
+                          <ChevronRight className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
             </CardContent>
           </Card>
         </div>
+
+        {/* Session Detail Modal */}
+        <KycSessionDetailModal
+          sessionId={selectedSessionId}
+          clientId={client.id}
+          open={sessionModalOpen}
+          onOpenChange={setSessionModalOpen}
+        />
       </TabsContent>
 
       <TabsContent value="billing">
