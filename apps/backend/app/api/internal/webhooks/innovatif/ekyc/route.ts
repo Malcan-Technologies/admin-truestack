@@ -320,6 +320,7 @@ export async function POST(request: NextRequest) {
       };
 
       // Upload images to S3 if present
+      // Images can be at top level OR nested in step1/step2 depending on callback_mode
       let s3FrontDocument = null;
       let s3BackDocument = null;
       let s3FaceImage = null;
@@ -327,33 +328,49 @@ export async function POST(request: NextRequest) {
 
       const uploadPromises: Promise<void>[] = [];
 
-      if (payload.front_document) {
+      // Extract step1 and step2 for nested image access (callback_mode: 2)
+      const step1 = payload.step1 as Record<string, unknown> | undefined;
+      const step2 = payload.step2 as Record<string, unknown> | undefined;
+
+      // Check for front_document at top level OR in step1.front_document_image
+      const frontDocImage = payload.front_document || 
+        (step1?.front_document_image as string | undefined);
+      if (frontDocImage) {
         uploadPromises.push(
-          uploadKycDocument(session.client_id, session.id, "front_document", payload.front_document)
+          uploadKycDocument(session.client_id, session.id, "front_document", frontDocImage)
             .then((key) => { s3FrontDocument = key; })
             .catch((err) => console.error("Failed to upload front_document:", err))
         );
       }
 
-      if (payload.back_document) {
+      // Check for back_document at top level OR in step1.back_document_image
+      const backDocImage = payload.back_document || 
+        (step1?.back_document_image as string | undefined);
+      if (backDocImage) {
         uploadPromises.push(
-          uploadKycDocument(session.client_id, session.id, "back_document", payload.back_document)
+          uploadKycDocument(session.client_id, session.id, "back_document", backDocImage)
             .then((key) => { s3BackDocument = key; })
             .catch((err) => console.error("Failed to upload back_document:", err))
         );
       }
 
-      if (payload.face_image) {
+      // Check for face_image at top level OR in step1.face_image
+      const faceImg = payload.face_image || 
+        (step1?.face_image as string | undefined);
+      if (faceImg) {
         uploadPromises.push(
-          uploadKycDocument(session.client_id, session.id, "face_image", payload.face_image)
+          uploadKycDocument(session.client_id, session.id, "face_image", faceImg)
             .then((key) => { s3FaceImage = key; })
             .catch((err) => console.error("Failed to upload face_image:", err))
         );
       }
 
-      if (payload.best_frame) {
+      // Check for best_frame at top level OR in step2.best_frame
+      const bestFrameImg = payload.best_frame || 
+        (step2?.best_frame as string | undefined);
+      if (bestFrameImg) {
         uploadPromises.push(
-          uploadKycDocument(session.client_id, session.id, "best_frame", payload.best_frame)
+          uploadKycDocument(session.client_id, session.id, "best_frame", bestFrameImg)
             .then((key) => { s3BestFrame = key; })
             .catch((err) => console.error("Failed to upload best_frame:", err))
         );
@@ -361,6 +378,8 @@ export async function POST(request: NextRequest) {
 
       // Wait for all uploads
       await Promise.all(uploadPromises);
+      
+      console.log(`[Innovatif Webhook] Image upload results: front=${!!s3FrontDocument}, back=${!!s3BackDocument}, face=${!!s3FaceImage}, bestFrame=${!!s3BestFrame}`);
 
       // Determine if this is a billable completion
       // Only bill on status = 2 (Completed), NOT on expired sessions

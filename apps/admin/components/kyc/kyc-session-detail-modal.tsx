@@ -105,22 +105,57 @@ export function KycSessionDetailModal({
   onOpenChange,
 }: KycSessionDetailModalProps) {
   const [loading, setLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [session, setSession] = useState<KycSessionDetail | null>(null);
   const [activeTab, setActiveTab] = useState("overview");
 
+  const fetchSession = async () => {
+    if (!sessionId) return;
+    setLoading(true);
+    try {
+      const data = await apiClient<KycSessionDetail>(`/api/admin/kyc-sessions/${sessionId}`);
+      setSession(data);
+    } catch (error) {
+      console.error("Failed to load session:", error);
+      toast.error("Failed to load session details");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const refreshFromProvider = async () => {
+    if (!sessionId) return;
+    setRefreshing(true);
+    try {
+      const result = await apiClient<{
+        success: boolean;
+        refreshed: boolean;
+        images_uploaded?: Record<string, boolean>;
+        error?: string;
+      }>(`/api/admin/kyc-sessions/${sessionId}/refresh`, {
+        method: "POST",
+      });
+      
+      if (result.success) {
+        toast.success("Session refreshed from provider");
+        // Reload session data to show updated info
+        await fetchSession();
+      } else {
+        toast.error(result.error || "Failed to refresh from provider");
+      }
+    } catch (error) {
+      console.error("Failed to refresh session:", error);
+      toast.error("Failed to refresh session from provider");
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
   useEffect(() => {
     if (open && sessionId) {
-      setLoading(true);
       setSession(null);
       setActiveTab("overview");
-
-      apiClient<KycSessionDetail>(`/api/admin/kyc-sessions/${sessionId}`)
-        .then(setSession)
-        .catch((error) => {
-          console.error("Failed to load session:", error);
-          toast.error("Failed to load session details");
-        })
-        .finally(() => setLoading(false));
+      fetchSession();
     }
   }, [open, sessionId]);
 
@@ -201,10 +236,24 @@ export function KycSessionDetailModal({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="border-slate-800 bg-slate-900 max-w-4xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="text-white flex items-center gap-3">
-            {session && getStatusIcon(session.status, session.result)}
-            KYC Session Details
-          </DialogTitle>
+          <div className="flex items-center justify-between">
+            <DialogTitle className="text-white flex items-center gap-3">
+              {session && getStatusIcon(session.status, session.result)}
+              KYC Session Details
+            </DialogTitle>
+            {session && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={refreshFromProvider}
+                disabled={refreshing}
+                className="border-indigo-500/30 bg-transparent text-indigo-300 hover:bg-indigo-500/10"
+              >
+                <RefreshCw className={`mr-2 h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
+                {refreshing ? "Refreshing..." : "Refresh from Provider"}
+              </Button>
+            )}
+          </div>
           <DialogDescription className="text-slate-400">
             {session ? (
               <span className="font-mono">{session.ref_id}</span>

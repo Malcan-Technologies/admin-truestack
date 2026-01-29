@@ -56,7 +56,7 @@ TrueStack KYC provides a simple, secure API for verifying user identities. Our s
 
 ```bash
 # 1. Create a KYC session
-curl -X POST https://api.truestack.my/v1/kyc/sessions \
+curl -X POST https://api.truestack.my/api/v1/kyc/sessions \
   -H "Authorization: Bearer YOUR_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
@@ -131,7 +131,7 @@ The KYC verification flow involves the following steps:
 Your backend calls the TrueStack API with the user's document details:
 
 ```http
-POST /v1/kyc/sessions
+POST /api/v1/kyc/sessions
 Authorization: Bearer ts_live_abc123...
 
 {
@@ -231,7 +231,7 @@ Use the `session_id` and `metadata` to identify the user and update their verifi
 Creates a new KYC verification session for an end-user.
 
 ```http
-POST /v1/kyc/sessions
+POST /api/v1/kyc/sessions
 ```
 
 #### Request Headers
@@ -299,7 +299,7 @@ https://yourapp.com/kyc/complete?status=2&result=1
 **Basic (using TrueStack's default status page):**
 
 ```bash
-curl -X POST https://api.truestack.my/v1/kyc/sessions \
+curl -X POST https://api.truestack.my/api/v1/kyc/sessions \
   -H "Authorization: Bearer ts_live_abc123..." \
   -H "Content-Type: application/json" \
   -d '{
@@ -315,7 +315,7 @@ curl -X POST https://api.truestack.my/v1/kyc/sessions \
 **With custom redirect URL:**
 
 ```bash
-curl -X POST https://api.truestack.my/v1/kyc/sessions \
+curl -X POST https://api.truestack.my/api/v1/kyc/sessions \
   -H "Authorization: Bearer ts_live_abc123..." \
   -H "Content-Type: application/json" \
   -d '{
@@ -359,7 +359,7 @@ curl -X POST https://api.truestack.my/v1/kyc/sessions \
 Retrieves the current status and details of a KYC session.
 
 ```http
-GET /v1/kyc/sessions/:id
+GET /api/v1/kyc/sessions/:id
 ```
 
 #### Path Parameters
@@ -371,7 +371,7 @@ GET /v1/kyc/sessions/:id
 #### Example Request
 
 ```bash
-curl -X GET https://api.truestack.my/v1/kyc/sessions/550e8400-e29b-41d4-a716-446655440000 \
+curl -X GET https://api.truestack.my/api/v1/kyc/sessions/550e8400-e29b-41d4-a716-446655440000 \
   -H "Authorization: Bearer ts_live_abc123..."
 ```
 
@@ -398,10 +398,10 @@ curl -X GET https://api.truestack.my/v1/kyc/sessions/550e8400-e29b-41d4-a716-446
     "address": "123 JALAN EXAMPLE, 50000 KUALA LUMPUR"
   },
   "documents": {
-    "front_document": "https://api.truestack.my/v1/kyc/sessions/.../documents/front_document",
-    "back_document": "https://api.truestack.my/v1/kyc/sessions/.../documents/back_document",
-    "face_image": "https://api.truestack.my/v1/kyc/sessions/.../documents/face_image",
-    "best_frame": "https://api.truestack.my/v1/kyc/sessions/.../documents/best_frame"
+    "front_document": "https://api.truestack.my/api/v1/kyc/sessions/.../documents/front_document",
+    "back_document": "https://api.truestack.my/api/v1/kyc/sessions/.../documents/back_document",
+    "face_image": "https://api.truestack.my/api/v1/kyc/sessions/.../documents/face_image",
+    "best_frame": "https://api.truestack.my/api/v1/kyc/sessions/.../documents/best_frame"
   }
 }
 ```
@@ -415,7 +415,7 @@ curl -X GET https://api.truestack.my/v1/kyc/sessions/550e8400-e29b-41d4-a716-446
 Fetches the latest verification status and updates the session. Use this when webhooks are delayed or to verify current status.
 
 ```http
-POST /v1/kyc/sessions/:id
+POST /api/v1/kyc/sessions/:id
 ```
 
 #### Path Parameters
@@ -427,7 +427,7 @@ POST /v1/kyc/sessions/:id
 #### Example Request
 
 ```bash
-curl -X POST https://api.truestack.my/v1/kyc/sessions/550e8400-e29b-41d4-a716-446655440000 \
+curl -X POST https://api.truestack.my/api/v1/kyc/sessions/550e8400-e29b-41d4-a716-446655440000 \
   -H "Authorization: Bearer ts_live_abc123..."
 ```
 
@@ -595,12 +595,24 @@ app.post('/webhooks/kyc', (req, res) => {
 });
 ```
 
+### Expected Response
+
+Your webhook endpoint must return an **HTTP 2xx status code** (e.g., 200, 201, 202) to acknowledge receipt. We only check the status code, not the response body.
+
+| Response | Result |
+|----------|--------|
+| HTTP 200-299 | Success - webhook marked as delivered |
+| HTTP 4xx/5xx | Failed - recorded as delivery failure |
+| Timeout/Error | Failed - recorded as delivery failure |
+
+**Important**: Respond within **5 seconds**. If your processing takes longer, return 200 immediately and process asynchronously.
+
 ### Webhook Best Practices
 
 1. **Respond quickly**: Return a 2xx status within 5 seconds
-2. **Process asynchronously**: Queue webhook data for processing
-3. **Handle duplicates**: Use `session_id` for idempotency
-4. **Retry handling**: We retry failed webhooks up to 3 times with exponential backoff
+2. **Process asynchronously**: Queue webhook data for processing, don't block the response
+3. **Handle duplicates**: Use `session_id` for idempotency - you may receive multiple webhooks for the same session
+4. **Log everything**: Store the raw webhook payload for debugging
 
 ---
 
@@ -724,7 +736,7 @@ async function createKycSession(
   webhookUrl: string,
   metadata?: Record<string, string>
 ): Promise<KycSession> {
-  const response = await fetch('https://api.truestack.my/v1/kyc/sessions', {
+  const response = await fetch('https://api.truestack.my/api/v1/kyc/sessions', {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${apiKey}`,
@@ -773,7 +785,7 @@ def create_kyc_session(
     metadata: Optional[Dict[str, str]] = None
 ) -> dict:
     response = requests.post(
-        'https://api.truestack.my/v1/kyc/sessions',
+        'https://api.truestack.my/api/v1/kyc/sessions',
         headers={
             'Authorization': f'Bearer {api_key}',
             'Content-Type': 'application/json',
@@ -814,7 +826,7 @@ function createKycSession(
     string $webhookUrl,
     array $metadata = []
 ): array {
-    $ch = curl_init('https://api.truestack.my/v1/kyc/sessions');
+    $ch = curl_init('https://api.truestack.my/api/v1/kyc/sessions');
     
     curl_setopt_array($ch, [
         CURLOPT_RETURNTRANSFER => true,
@@ -886,7 +898,7 @@ func CreateKycSession(apiKey string, req KycSessionRequest) (*KycSessionResponse
     
     httpReq, _ := http.NewRequest(
         "POST",
-        "https://api.truestack.my/v1/kyc/sessions",
+        "https://api.truestack.my/api/v1/kyc/sessions",
         bytes.NewBuffer(body),
     )
     
@@ -964,7 +976,7 @@ A: Currently MyKad (Malaysian IC) and Passports.
 ### Technical
 
 **Q: What if I don't receive a webhook?**
-A: Use the Refresh Session Status endpoint (`POST /v1/kyc/sessions/:id`) to check the current status.
+A: Use the Refresh Session Status endpoint (`POST /api/v1/kyc/sessions/:id`) to check the current status.
 
 **Q: How do I test in development?**
 A: Contact us for sandbox credentials and test identity documents.

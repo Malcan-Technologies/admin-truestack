@@ -339,12 +339,19 @@ X-TrueStack-Event: kyc.session.completed
 
 | Field | Description |
 |-------|-------------|
-| `webhook_delivered` | Boolean - true if webhook was successfully delivered |
+| `webhook_delivered` | Boolean - true if webhook was successfully delivered (client returned 2xx) |
 | `webhook_delivered_at` | Timestamp of successful delivery |
 | `webhook_attempts` | Number of delivery attempts |
 | `webhook_last_error` | Last error message if delivery failed |
 
-Webhook delivery is attempted once. If no `webhook_url` is configured (neither at session nor client level), no webhook is sent.
+**Delivery behavior:**
+- Webhook delivery is attempted **once per Innovatif callback** (no automatic retry)
+- Success is determined by HTTP 2xx response from client (response body is ignored)
+- If client returns non-2xx or times out, it's recorded as failed
+- Innovatif may send multiple webhooks for the same session (with different `request_time`), each triggers a forward to the client
+- The `webhook_attempts` counter increments for each attempt, so multiple Innovatif callbacks = multiple attempts
+
+**Note:** `webhook_url` is now required per-request. Legacy sessions without webhook_url will not receive webhooks.
 
 ---
 

@@ -26,7 +26,7 @@ API keys are generated per-client in the TrueStack Admin portal under Client > A
 Creates a new KYC verification session for an end-user.
 
 ```
-POST /v1/kyc/sessions
+POST /api/v1/kyc/sessions
 ```
 
 #### Request Headers
@@ -70,7 +70,7 @@ POST /v1/kyc/sessions
 #### Example Request
 
 ```bash
-curl -X POST https://api.truestack.my/v1/kyc/sessions \
+curl -X POST https://api.truestack.my/api/v1/kyc/sessions \
   -H "Authorization: Bearer ts_live_abc123..." \
   -H "Content-Type: application/json" \
   -d '{
@@ -178,7 +178,7 @@ KYC provider error:
 Retrieves the current status of a KYC session from TrueStack's database.
 
 ```
-GET /v1/kyc/sessions/:id
+GET /api/v1/kyc/sessions/:id
 ```
 
 #### Path Parameters
@@ -190,7 +190,7 @@ GET /v1/kyc/sessions/:id
 #### Example Request
 
 ```bash
-curl -X GET https://api.truestack.my/v1/kyc/sessions/550e8400-e29b-41d4-a716-446655440000 \
+curl -X GET https://api.truestack.my/api/v1/kyc/sessions/550e8400-e29b-41d4-a716-446655440000 \
   -H "Authorization: Bearer ts_live_abc123..."
 ```
 
@@ -234,7 +234,7 @@ curl -X GET https://api.truestack.my/v1/kyc/sessions/550e8400-e29b-41d4-a716-446
 Fetches the latest status directly from the KYC provider (Innovatif) and updates our database. Use this when webhooks are delayed or if you need to verify the current status.
 
 ```
-POST /v1/kyc/sessions/:id
+POST /api/v1/kyc/sessions/:id
 ```
 
 #### Path Parameters
@@ -246,7 +246,7 @@ POST /v1/kyc/sessions/:id
 #### Example Request
 
 ```bash
-curl -X POST https://api.truestack.my/v1/kyc/sessions/550e8400-e29b-41d4-a716-446655440000 \
+curl -X POST https://api.truestack.my/api/v1/kyc/sessions/550e8400-e29b-41d4-a716-446655440000 \
   -H "Authorization: Bearer ts_live_abc123..."
 ```
 
@@ -370,12 +370,12 @@ When provider is unreachable:
 
 ## Integration Flow
 
-1. **Create Session**: Call `POST /v1/kyc/sessions` with user details
+1. **Create Session**: Call `POST /api/v1/kyc/sessions` with user details
 2. **Redirect User**: Send the end-user to the `onboarding_url` returned
 3. **User Completes KYC**: User takes photos of ID and performs liveness check
 4. **Webhook Notification**: TrueStack sends a webhook to your configured endpoint
-5. **(Optional) Refresh Status**: Call `POST /v1/kyc/sessions/:id` if webhook is delayed
-6. **Get Full Details**: Call `GET /v1/kyc/sessions/:id` to retrieve OCR data and documents
+5. **(Optional) Refresh Status**: Call `POST /api/v1/kyc/sessions/:id` if webhook is delayed
+6. **Get Full Details**: Call `GET /api/v1/kyc/sessions/:id` to retrieve OCR data and documents
 
 ### Sequence Diagram
 
@@ -385,7 +385,7 @@ When provider is unreachable:
 │   App    │     │     API      │     │   eKYC    │     │           │
 └────┬─────┘     └──────┬───────┘     └─────┬─────┘     └─────┬─────┘
      │                  │                   │                 │
-     │ POST /v1/kyc/sessions                │                 │
+     │ POST /api/v1/kyc/sessions             │                 │
      │─────────────────>│                   │                 │
      │                  │ Create Transaction│                 │
      │                  │──────────────────>│                 │
@@ -506,7 +506,7 @@ Webhooks are sent as HTTP POST requests. Verify the webhook authenticity by:
 ### JavaScript/TypeScript
 
 ```typescript
-const response = await fetch('https://api.truestack.my/v1/kyc/sessions', {
+const response = await fetch('https://api.truestack.my/api/v1/kyc/sessions', {
   method: 'POST',
   headers: {
     'Authorization': `Bearer ${apiKey}`,
@@ -532,7 +532,7 @@ window.location.href = onboarding_url;
 import requests
 
 response = requests.post(
-    'https://api.truestack.my/v1/kyc/sessions',
+    'https://api.truestack.my/api/v1/kyc/sessions',
     headers={
         'Authorization': f'Bearer {api_key}',
         'Content-Type': 'application/json',
@@ -555,7 +555,7 @@ onboarding_url = data['onboarding_url']
 ### PHP
 
 ```php
-$ch = curl_init('https://api.truestack.my/v1/kyc/sessions');
+$ch = curl_init('https://api.truestack.my/api/v1/kyc/sessions');
 curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
 curl_setopt($ch, CURLOPT_POST, true);
 curl_setopt($ch, CURLOPT_HTTPHEADER, [
