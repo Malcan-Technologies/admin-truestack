@@ -37,6 +37,7 @@ export async function GET(
       success_url: string | null;
       fail_url: string | null;
       webhook_url: string | null;
+      redirect_url: string | null;
       metadata: Record<string, unknown>;
       innovatif_response: Record<string, unknown> | null;
       s3_front_document: string | null;
@@ -68,6 +69,7 @@ export async function GET(
         success_url,
         fail_url,
         webhook_url,
+        redirect_url,
         metadata,
         innovatif_response,
         s3_front_document,
@@ -200,6 +202,7 @@ export async function GET(
       document_type: kycSession.document_type,
       platform: kycSession.platform,
       webhook_url: kycSession.webhook_url,
+      redirect_url: kycSession.redirect_url,
       metadata: kycSession.metadata,
       billed: kycSession.billed,
       webhook_delivered: kycSession.webhook_delivered,
