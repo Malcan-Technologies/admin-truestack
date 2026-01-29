@@ -206,6 +206,25 @@ export async function PATCH(
       );
     }
 
+    // Check if this invoice has superseded other invoices
+    const supersededInvoices = await query<{ id: string; invoice_number: string }>(`
+      SELECT id, invoice_number
+      FROM invoice
+      WHERE superseded_by_invoice_id = $1
+    `, [invoiceId]);
+
+    // Restore superseded invoices back to 'generated' status
+    if (supersededInvoices.length > 0) {
+      await query(`
+        UPDATE invoice 
+        SET status = 'generated', superseded_by_invoice_id = NULL, updated_at = NOW()
+        WHERE superseded_by_invoice_id = $1
+      `, [invoiceId]);
+      
+      console.log(`[Void] Restored ${supersededInvoices.length} superseded invoice(s):`, 
+        supersededInvoices.map(i => i.invoice_number));
+    }
+
     // Void the invoice
     await query(`
       UPDATE invoice 
@@ -213,7 +232,11 @@ export async function PATCH(
       WHERE id = $1
     `, [invoiceId]);
 
-    return NextResponse.json({ success: true, status: "void" });
+    return NextResponse.json({ 
+      success: true, 
+      status: "void",
+      restoredInvoices: supersededInvoices.map(i => i.invoice_number),
+    });
   } catch (error) {
     console.error("Error updating invoice:", error);
     return NextResponse.json(

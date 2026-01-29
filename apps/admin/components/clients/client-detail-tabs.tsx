@@ -303,16 +303,21 @@ export function ClientDetailTabs({ client }: ClientDetailTabsProps) {
 
   const voidInvoice = async (invoiceId: string, invoiceNumber: string) => {
     const confirmed = window.confirm(
-      `Are you sure you want to void invoice ${invoiceNumber}?\n\nThis will mark the invoice as void and it will no longer be considered in billing calculations.`
+      `Are you sure you want to void invoice ${invoiceNumber}?\n\nThis will mark the invoice as void and it will no longer be considered in billing calculations.\n\nAny invoices that were superseded by this invoice will be restored.`
     );
     if (!confirmed) return;
 
     try {
-      await apiClient(
+      const result = await apiClient<{ success: boolean; restoredInvoices?: string[] }>(
         `/api/admin/clients/${client.id}/invoices/${invoiceId}`,
         { method: "PATCH", body: JSON.stringify({ status: "void" }) }
       );
-      toast.success(`Invoice ${invoiceNumber} has been voided`);
+      
+      if (result.restoredInvoices && result.restoredInvoices.length > 0) {
+        toast.success(`Invoice ${invoiceNumber} voided. Restored: ${result.restoredInvoices.join(", ")}`);
+      } else {
+        toast.success(`Invoice ${invoiceNumber} has been voided`);
+      }
       // Refresh invoices list
       fetchInvoices();
     } catch (error) {

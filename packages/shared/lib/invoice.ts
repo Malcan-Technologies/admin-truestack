@@ -218,12 +218,13 @@ export async function calculateBillingPeriod(
 
   let periodStart: Date;
   if (lastInvoice) {
-    // Start day after last invoice ended
-    periodStart = new Date(lastInvoice.period_end);
-    periodStart.setDate(periodStart.getDate() + 1);
-    periodStart.setHours(0, 0, 0, 0);
+    // Start day after last invoice ended (in Malaysia timezone)
+    // The period_end from DB is stored as UTC timestamp representing Malaysia end-of-day
+    const lastEnd = new Date(lastInvoice.period_end);
+    // Add 1 day to get start of next day
+    periodStart = new Date(lastEnd.getTime() + 1); // 1ms after last invoice end = start of next day
   } else {
-    // First invoice - start from client creation date
+    // First invoice - start from client creation date (beginning of that day in Malaysia)
     const client = await queryOne<{ created_at: string }>(`
       SELECT created_at FROM client WHERE id = $1
     `, [clientId]);
@@ -231,13 +232,18 @@ export async function calculateBillingPeriod(
     if (!client) {
       throw new Error(`Client not found: ${clientId}`);
     }
-    periodStart = new Date(client.created_at);
-    periodStart.setHours(0, 0, 0, 0);
+    // Client created_at is in UTC, get the start of that day in Malaysia
+    const createdAt = new Date(client.created_at);
+    // Convert to Malaysia day and get start of that day
+    const malaysiaTime = new Date(createdAt.getTime() + MALAYSIA_OFFSET_MS);
+    const malaysiaDateStr = malaysiaTime.toISOString().split("T")[0];
+    // Start of that day in Malaysia = midnight Malaysia as UTC
+    periodStart = new Date(new Date(malaysiaDateStr + "T00:00:00.000Z").getTime() - MALAYSIA_OFFSET_MS);
   }
 
-  // Period end is the target date at end of day
-  const periodEnd = new Date(targetEndDate);
-  periodEnd.setHours(23, 59, 59, 999);
+  // targetEndDate should already be properly calculated as end of day in Malaysia timezone
+  // Just use it directly
+  const periodEnd = targetEndDate;
 
   return { periodStart, periodEnd };
 }
