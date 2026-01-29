@@ -45,6 +45,7 @@ type KycSessionDetail = {
   document_type: string;
   platform: string;
   webhook_url: string | null;
+  redirect_url: string | null;
   metadata: Record<string, unknown>;
   billed: boolean;
   webhook_delivered: boolean;
@@ -234,7 +235,7 @@ export function KycSessionDetailModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="border-slate-800 bg-slate-900 max-w-4xl max-h-[90vh] overflow-y-auto">
+      <DialogContent size="6xl" className="border-slate-800 bg-slate-900 max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <div className="flex items-center justify-between">
             <DialogTitle className="text-white flex items-center gap-3">
@@ -426,6 +427,33 @@ export function KycSessionDetailModal({
                       )}
                     </div>
                   </div>
+                </div>
+              </div>
+
+              {/* Redirect URL */}
+              <div className="rounded-lg border border-slate-700 bg-slate-800/30 p-4 space-y-2">
+                <h4 className="text-sm font-medium text-slate-300 flex items-center gap-2">
+                  <ExternalLink className="h-4 w-4" />
+                  Post-KYC Redirect
+                </h4>
+                <div className="text-sm">
+                  {session.redirect_url ? (
+                    <div className="space-y-1">
+                      <p className="text-xs text-slate-500">Client-specified redirect URL:</p>
+                      <a
+                        href={session.redirect_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-indigo-400 hover:text-indigo-300 font-mono text-xs break-all"
+                      >
+                        {session.redirect_url}
+                      </a>
+                    </div>
+                  ) : (
+                    <p className="text-slate-500 text-xs">
+                      Using TrueStack default status page (no custom redirect URL provided)
+                    </p>
+                  )}
                 </div>
               </div>
 

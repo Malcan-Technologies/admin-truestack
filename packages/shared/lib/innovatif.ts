@@ -210,6 +210,15 @@ export async function createInnovatifTransaction(
     }
   }
 
+  // Check for Innovatif error response (e.g., Invalid NRIC Format)
+  // These come as: { message: "Failed", error_code: "103", description: "Invalid NRIC Format" }
+  if (responseData.message === "Failed" || responseData.error_code) {
+    const errorDescription = responseData.description || responseData.message || "Unknown error";
+    const errorCode = responseData.error_code || "UNKNOWN";
+    console.error(`Innovatif error [${errorCode}]: ${errorDescription}`);
+    throw new Error(`Innovatif: ${errorDescription}`);
+  }
+
   // Extract onboarding URL, ID, and prefixed ref_id
   const onboardingUrl = responseData.onboarding_url || responseData.url;
   const onboardingId = responseData.onboarding_id || responseData.transaction_id;

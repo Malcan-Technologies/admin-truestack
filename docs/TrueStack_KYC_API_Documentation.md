@@ -702,7 +702,7 @@ When `result` is `rejected`, the `reject_message` field indicates why:
 | 404 | `NOT_FOUND` | Session not found |
 | 429 | `RATE_LIMITED` | Too many requests |
 | 500 | `INTERNAL_ERROR` | Server error |
-| 502 | `GATEWAY_ERROR` | Verification service temporarily unavailable |
+| 502 | `GATEWAY_ERROR` | Verification service error (includes upstream provider errors) |
 
 ### Common Errors
 
@@ -730,6 +730,19 @@ When `result` is `rejected`, the `reject_message` field indicates why:
   "balance": 0.5
 }
 ```
+
+**Verification service error (e.g., invalid document format):**
+```json
+{
+  "error": "GATEWAY_ERROR",
+  "message": "Invalid NRIC Format"
+}
+```
+
+> **Note:** Gateway errors include specific error messages from the verification provider when available. Common messages include:
+> - `"Invalid NRIC Format"` - The document number format is incorrect
+> - `"Document not supported"` - The document type is not supported
+> - `"Service temporarily unavailable"` - Upstream service is down
 
 ---
 

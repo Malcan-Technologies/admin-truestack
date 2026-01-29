@@ -332,15 +332,23 @@ export async function POST(request: NextRequest) {
     } catch (innovatifError) {
       console.error("Innovatif API error:", innovatifError);
       
+      const errorMessage = innovatifError instanceof Error ? innovatifError.message : "Innovatif API error";
+      
       // Update session to failed status - no billing since session never started
       // (billing only happens on completed sessions via webhook)
       await query(
         `UPDATE kyc_session SET status = 'expired', result = 'rejected', reject_message = $1 WHERE id = $2`,
-        [innovatifError instanceof Error ? innovatifError.message : "Innovatif API error", session.id]
+        [errorMessage, session.id]
       );
 
+      // Pass through Innovatif error message to client for better debugging
+      // Strip "Innovatif: " prefix if present for cleaner client-facing message
+      const clientMessage = errorMessage.startsWith("Innovatif: ") 
+        ? errorMessage.substring(11) 
+        : errorMessage;
+
       return NextResponse.json(
-        { error: "GATEWAY_ERROR", message: "Failed to initiate KYC session" },
+        { error: "GATEWAY_ERROR", message: clientMessage },
         { status: 502 }
       );
     }

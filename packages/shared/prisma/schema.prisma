@@ -251,6 +251,7 @@ model KycSession {
   successUrl           String?   @map("success_url")
   failUrl              String?   @map("fail_url")
   webhookUrl           String?   @map("webhook_url") // Per-session webhook override
+  redirectUrl          String?   @map("redirect_url") // Client's custom redirect URL after KYC completion
   metadata             Json      @default("{}")
   innovatifResponse    Json?     @map("innovatif_response")
   s3FrontDocument      String?   @map("s3_front_document")
