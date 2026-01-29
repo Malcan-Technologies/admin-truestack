@@ -301,6 +301,25 @@ export function ClientDetailTabs({ client }: ClientDetailTabsProps) {
     }
   };
 
+  const voidInvoice = async (invoiceId: string, invoiceNumber: string) => {
+    const confirmed = window.confirm(
+      `Are you sure you want to void invoice ${invoiceNumber}?\n\nThis will mark the invoice as void and it will no longer be considered in billing calculations.`
+    );
+    if (!confirmed) return;
+
+    try {
+      await apiClient(
+        `/api/admin/clients/${client.id}/invoices/${invoiceId}`,
+        { method: "PATCH", body: JSON.stringify({ status: "void" }) }
+      );
+      toast.success(`Invoice ${invoiceNumber} has been voided`);
+      // Refresh invoices list
+      fetchInvoices();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to void invoice");
+    }
+  };
+
   const getStatusIcon = (status: string, result: string | null) => {
     if (status === "completed") {
       if (result === "approved") {
@@ -1037,6 +1056,17 @@ export function ClientDetailTabs({ client }: ClientDetailTabsProps) {
                               >
                                 <DollarSign className="mr-1 h-4 w-4" />
                                 Pay
+                              </Button>
+                            )}
+                            {(invoice.status === "generated" || invoice.status === "pending") && invoice.amount_paid_credits === 0 && (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => voidInvoice(invoice.id, invoice.invoice_number)}
+                                className="h-8 w-8 text-red-400 hover:bg-red-500/10 hover:text-red-300"
+                                title="Void Invoice"
+                              >
+                                <Ban className="h-4 w-4" />
                               </Button>
                             )}
                           </div>
