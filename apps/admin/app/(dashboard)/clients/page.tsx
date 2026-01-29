@@ -11,6 +11,10 @@ type Client = {
   billed_total: number;
   billed_mtd: number;
   created_at: string;
+  unpaid_invoice_count: number;
+  unpaid_amount_credits: number;
+  has_overdue_invoice: boolean;
+  oldest_overdue_days: number | null;
 };
 
 async function getClients(): Promise<Client[]> {

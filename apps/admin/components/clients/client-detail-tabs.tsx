@@ -12,7 +12,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Key, CreditCard, FileCheck, Copy, Eye, EyeOff, Ban, DollarSign, Plus, Trash2, RefreshCw, CheckCircle, XCircle, Clock, AlertCircle, ChevronLeft, ChevronRight } from "lucide-react";
+import { Key, CreditCard, FileCheck, Copy, Eye, EyeOff, Ban, DollarSign, Plus, Trash2, RefreshCw, CheckCircle, XCircle, Clock, AlertCircle, ChevronLeft, ChevronRight, FileText, Download } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -29,7 +29,9 @@ import { toast } from "sonner";
 import { GenerateApiKeyModal } from "./generate-api-key-modal";
 import { TopupCreditsModal } from "./topup-credits-modal";
 import { KycSessionDetailModal } from "./kyc-session-detail-modal";
-import { apiClient } from "@/lib/utils";
+import { GenerateInvoiceModal } from "./generate-invoice-modal";
+import { RecordPaymentModal } from "./record-payment-modal";
+import { apiClient, formatDate, formatDateTime, TIMEZONE } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
@@ -105,6 +107,23 @@ type KycSessionsPagination = {
   totalPages: number;
 };
 
+type Invoice = {
+  id: string;
+  invoice_number: string;
+  period_start: string;
+  period_end: string;
+  due_date: string;
+  total_usage_credits: number;
+  previous_balance_credits: number;
+  amount_due_credits: number;
+  amount_due_myr: string;
+  amount_paid_credits: number;
+  amount_paid_myr: string;
+  status: string;
+  generated_at: string;
+  generated_by_name: string | null;
+};
+
 interface ClientDetailTabsProps {
   client: Client;
 }
@@ -137,6 +156,13 @@ export function ClientDetailTabs({ client }: ClientDetailTabsProps) {
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
   const [sessionModalOpen, setSessionModalOpen] = useState(false);
 
+  // Invoice state
+  const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [loadingInvoices, setLoadingInvoices] = useState(true);
+  const [generateInvoiceModalOpen, setGenerateInvoiceModalOpen] = useState(false);
+  const [recordPaymentModalOpen, setRecordPaymentModalOpen] = useState(false);
+  const [selectedInvoiceId, setSelectedInvoiceId] = useState<string | null>(null);
+
   // Fetch KYC sessions
   const fetchKycSessions = useCallback(async (page = 1) => {
     setLoadingKycSessions(true);
@@ -158,6 +184,71 @@ export function ClientDetailTabs({ client }: ClientDetailTabsProps) {
   const openSessionDetail = (sessionId: string) => {
     setSelectedSessionId(sessionId);
     setSessionModalOpen(true);
+  };
+
+  // Fetch invoices
+  const fetchInvoices = useCallback(async () => {
+    setLoadingInvoices(true);
+    try {
+      const data = await apiClient<{ invoices: Invoice[] }>(
+        `/api/admin/clients/${client.id}/invoices`
+      );
+      setInvoices(data.invoices);
+    } catch (error) {
+      console.error("Error fetching invoices:", error);
+      toast.error("Failed to load invoices");
+    } finally {
+      setLoadingInvoices(false);
+    }
+  }, [client.id]);
+
+  const openRecordPayment = (invoiceId: string) => {
+    setSelectedInvoiceId(invoiceId);
+    setRecordPaymentModalOpen(true);
+  };
+
+  const getInvoiceStatusBadge = (invoice: Invoice) => {
+    const dueDate = new Date(invoice.due_date);
+    const today = new Date();
+    const isOverdue = invoice.status !== "paid" && invoice.status !== "void" && invoice.status !== "superseded" && dueDate < today;
+
+    if (invoice.status === "paid") {
+      return <Badge className="border-green-500/30 bg-green-500/10 text-green-400">Paid</Badge>;
+    }
+    if (invoice.status === "void") {
+      return <Badge className="border-slate-500/30 bg-slate-500/10 text-slate-400">Void</Badge>;
+    }
+    if (invoice.status === "superseded") {
+      return <Badge className="border-slate-500/30 bg-slate-500/10 text-slate-400">Superseded</Badge>;
+    }
+    if (invoice.status === "partial") {
+      return (
+        <Badge className={isOverdue ? "border-red-500/30 bg-red-500/10 text-red-400" : "border-amber-500/30 bg-amber-500/10 text-amber-400"}>
+          Partial {isOverdue && "(Overdue)"}
+        </Badge>
+      );
+    }
+    // Generated
+    return (
+      <Badge className={isOverdue ? "border-red-500/30 bg-red-500/10 text-red-400" : "border-blue-500/30 bg-blue-500/10 text-blue-400"}>
+        {isOverdue ? "Overdue" : "Pending"}
+      </Badge>
+    );
+  };
+
+  const downloadInvoicePdf = async (invoiceId: string) => {
+    try {
+      const data = await apiClient<{ pdfUrl: string }>(
+        `/api/admin/clients/${client.id}/invoices/${invoiceId}`
+      );
+      if (data.pdfUrl) {
+        window.open(data.pdfUrl, "_blank");
+      } else {
+        toast.error("PDF not available");
+      }
+    } catch (error) {
+      toast.error("Failed to download invoice");
+    }
   };
 
   const getStatusIcon = (status: string, result: string | null) => {
@@ -348,7 +439,10 @@ export function ClientDetailTabs({ client }: ClientDetailTabsProps) {
 
     // Fetch KYC sessions
     fetchKycSessions();
-  }, [client.id, fetchKycSessions]);
+
+    // Fetch invoices
+    fetchInvoices();
+  }, [client.id, fetchKycSessions, fetchInvoices]);
 
   return (
     <Tabs defaultValue="overview" className="space-y-6">
@@ -448,7 +542,7 @@ export function ClientDetailTabs({ client }: ClientDetailTabsProps) {
                 <div>
                   <span className="text-slate-400">Billed Sessions</span>
                   <p className="text-xs text-slate-500">
-                    {new Date().toLocaleString("en-US", { month: "long", year: "numeric" })}
+                    {new Date().toLocaleString("en-MY", { month: "long", year: "numeric", timeZone: TIMEZONE })}
                   </p>
                 </div>
                 <span className="text-2xl font-semibold text-green-400">
@@ -554,11 +648,11 @@ export function ClientDetailTabs({ client }: ClientDetailTabsProps) {
                         </Badge>
                       </TableCell>
                       <TableCell className="text-slate-400">
-                        {new Date(apiKey.created_at).toLocaleDateString()}
+                        {formatDate(apiKey.created_at)}
                       </TableCell>
                       <TableCell className="text-slate-400">
                         {apiKey.revoked_at
-                          ? new Date(apiKey.revoked_at).toLocaleString()
+                          ? formatDateTime(apiKey.revoked_at)
                           : "-"}
                       </TableCell>
                       <TableCell className="text-right">
@@ -698,7 +792,7 @@ export function ClientDetailTabs({ client }: ClientDetailTabsProps) {
                             )}
                           </TableCell>
                           <TableCell className="text-slate-400 text-sm">
-                            {new Date(session.created_at).toLocaleString()}
+                            {formatDateTime(session.created_at)}
                           </TableCell>
                           <TableCell className="text-right">
                             <Button
@@ -773,108 +867,257 @@ export function ClientDetailTabs({ client }: ClientDetailTabsProps) {
       </TabsContent>
 
       <TabsContent value="billing">
-        <Card className="border-slate-800 bg-slate-900/50">
-          <CardHeader className="flex flex-row items-center justify-between">
-            <div>
-              <CardTitle className="text-white">Credit Ledger</CardTitle>
-              <CardDescription className="text-slate-400">
-                View credit transactions and top-up history.
-              </CardDescription>
-            </div>
-            <TopupCreditsModal
-              clientId={client.id}
-              clientName={client.name}
-              currentBalance={creditBalance}
-            />
-          </CardHeader>
-          <CardContent>
-            <div className="mb-6 rounded-lg border border-slate-700 bg-slate-800/50 p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <span className="text-sm text-slate-400">Current Balance</span>
-                  <p className="text-xs text-slate-500 mt-1">10 credits = RM 1</p>
+        <div className="space-y-6">
+          {/* Invoices Section */}
+          <Card className="border-slate-800 bg-slate-900/50">
+            <CardHeader className="flex flex-row items-center justify-between">
+              <div>
+                <CardTitle className="text-white">Invoices</CardTitle>
+                <CardDescription className="text-slate-400">
+                  View and manage invoices for this client.
+                </CardDescription>
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={fetchInvoices}
+                  disabled={loadingInvoices}
+                  className="border-slate-700 bg-transparent text-slate-300 hover:bg-slate-800 hover:text-white"
+                >
+                  <RefreshCw className={`mr-2 h-4 w-4 ${loadingInvoices ? "animate-spin" : ""}`} />
+                  Refresh
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={() => setGenerateInvoiceModalOpen(true)}
+                  className="bg-gradient-to-r from-indigo-500 to-violet-500 text-white hover:from-indigo-600 hover:to-violet-600"
+                >
+                  <FileText className="mr-2 h-4 w-4" />
+                  Generate Invoice
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {loadingInvoices ? (
+                <div className="flex items-center justify-center py-8">
+                  <RefreshCw className="h-8 w-8 text-slate-600 animate-spin" />
                 </div>
-                <div className="text-right">
-                  <span className="text-2xl font-semibold text-white">
-                    {creditBalance.toLocaleString()} credits
-                  </span>
-                  <p className="text-sm text-slate-400">
-                    (RM {(creditBalance / 10).toFixed(2)})
+              ) : invoices.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-8">
+                  <FileText className="h-12 w-12 text-slate-600 mb-4" />
+                  <p className="text-slate-400">No invoices yet</p>
+                  <p className="text-sm text-slate-500">
+                    Generate an invoice to bill this client for usage.
                   </p>
                 </div>
-              </div>
-            </div>
-
-            {loadingCredits ? (
-              <p className="text-sm text-slate-400">Loading transactions...</p>
-            ) : creditEntries.length === 0 ? (
-              <p className="text-sm text-slate-400">
-                No transactions yet. Top up credits to enable KYC session creation.
-              </p>
-            ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow className="border-slate-800 hover:bg-transparent">
-                    <TableHead className="text-slate-400">Date</TableHead>
-                    <TableHead className="text-slate-400">Type</TableHead>
-                    <TableHead className="text-slate-400">Description</TableHead>
-                    <TableHead className="text-right text-slate-400">Amount (Credits)</TableHead>
-                    <TableHead className="text-right text-slate-400">Balance (Credits)</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {creditEntries.map((entry) => (
-                    <TableRow key={entry.id} className="border-slate-800">
-                      <TableCell className="text-slate-400">
-                        {new Date(entry.created_at).toLocaleDateString()}
-                      </TableCell>
-                      <TableCell>
-                        <Badge
-                          variant="outline"
-                          className={
-                            entry.type === "topup"
-                              ? "border-green-500/30 bg-green-500/10 text-green-400"
-                              : entry.type === "included"
-                              ? "border-indigo-500/30 bg-indigo-500/10 text-indigo-400"
-                              : entry.type === "usage"
-                              ? "border-blue-500/30 bg-blue-500/10 text-blue-400"
-                              : entry.type === "refund"
-                              ? "border-amber-500/30 bg-amber-500/10 text-amber-400"
-                              : "border-slate-500/30 bg-slate-500/10 text-slate-400"
-                          }
-                        >
-                          {entry.type}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-slate-300">
-                        {entry.description || "-"}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div>
-                          <span className={`font-medium ${entry.amount >= 0 ? "text-green-400" : "text-red-400"}`}>
-                            {entry.amount >= 0 ? "+" : ""}
-                            {entry.amount.toLocaleString()}
-                          </span>
-                          <p className="text-xs text-slate-500">
-                            (RM {Math.abs(entry.amount / 10).toFixed(2)})
-                          </p>
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div>
-                          <span className="text-slate-300">{entry.balance_after.toLocaleString()}</span>
-                          <p className="text-xs text-slate-500">
-                            (RM {(entry.balance_after / 10).toFixed(2)})
-                          </p>
-                        </div>
-                      </TableCell>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow className="border-slate-800 hover:bg-transparent">
+                      <TableHead className="text-slate-400">Invoice #</TableHead>
+                      <TableHead className="text-slate-400">Period</TableHead>
+                      <TableHead className="text-slate-400">Due Date</TableHead>
+                      <TableHead className="text-slate-400">Status</TableHead>
+                      <TableHead className="text-right text-slate-400">Amount Due</TableHead>
+                      <TableHead className="text-right text-slate-400">Paid</TableHead>
+                      <TableHead className="text-right text-slate-400">Actions</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            )}
-          </CardContent>
-        </Card>
+                  </TableHeader>
+                  <TableBody>
+                    {invoices.map((invoice) => (
+                      <TableRow key={invoice.id} className="border-slate-800">
+                        <TableCell className="font-mono text-sm text-slate-300">
+                          {invoice.invoice_number}
+                        </TableCell>
+                        <TableCell className="text-sm text-slate-400">
+                          {formatDate(invoice.period_start)} - {formatDate(invoice.period_end)}
+                        </TableCell>
+                        <TableCell className="text-sm text-slate-400">
+                          {formatDate(invoice.due_date)}
+                        </TableCell>
+                        <TableCell>
+                          {getInvoiceStatusBadge(invoice)}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div>
+                            <span className="text-slate-300">RM {parseFloat(invoice.amount_due_myr).toFixed(2)}</span>
+                            <p className="text-xs text-slate-500">{invoice.amount_due_credits.toLocaleString()} cr</p>
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div>
+                            <span className="text-green-400">RM {parseFloat(invoice.amount_paid_myr).toFixed(2)}</span>
+                            <p className="text-xs text-slate-500">{invoice.amount_paid_credits.toLocaleString()} cr</p>
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex items-center justify-end gap-1">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => downloadInvoicePdf(invoice.id)}
+                              className="h-8 w-8 text-slate-400 hover:text-white"
+                              title="Download PDF"
+                            >
+                              <Download className="h-4 w-4" />
+                            </Button>
+                            {(invoice.status === "generated" || invoice.status === "partial") && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => openRecordPayment(invoice.id)}
+                                className="text-green-400 hover:bg-green-500/10 hover:text-green-300"
+                              >
+                                <DollarSign className="mr-1 h-4 w-4" />
+                                Pay
+                              </Button>
+                            )}
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Credit Ledger Section */}
+          <Card className="border-slate-800 bg-slate-900/50">
+            <CardHeader className="flex flex-row items-center justify-between">
+              <div>
+                <CardTitle className="text-white">Credit Ledger</CardTitle>
+                <CardDescription className="text-slate-400">
+                  View credit transactions and top-up history.
+                </CardDescription>
+              </div>
+              <TopupCreditsModal
+                clientId={client.id}
+                clientName={client.name}
+                currentBalance={creditBalance}
+              />
+            </CardHeader>
+            <CardContent>
+              <div className="mb-6 rounded-lg border border-slate-700 bg-slate-800/50 p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <span className="text-sm text-slate-400">Current Balance</span>
+                    <p className="text-xs text-slate-500 mt-1">10 credits = RM 1</p>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-2xl font-semibold text-white">
+                      {creditBalance.toLocaleString()} credits
+                    </span>
+                    <p className="text-sm text-slate-400">
+                      (RM {(creditBalance / 10).toFixed(2)})
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {loadingCredits ? (
+                <p className="text-sm text-slate-400">Loading transactions...</p>
+              ) : creditEntries.length === 0 ? (
+                <p className="text-sm text-slate-400">
+                  No transactions yet. Top up credits to enable KYC session creation.
+                </p>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow className="border-slate-800 hover:bg-transparent">
+                      <TableHead className="text-slate-400">Date</TableHead>
+                      <TableHead className="text-slate-400">Type</TableHead>
+                      <TableHead className="text-slate-400">Description</TableHead>
+                      <TableHead className="text-right text-slate-400">Amount (Credits)</TableHead>
+                      <TableHead className="text-right text-slate-400">Balance (Credits)</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {creditEntries.map((entry) => (
+                      <TableRow key={entry.id} className="border-slate-800">
+                        <TableCell className="text-slate-400">
+                          {formatDate(entry.created_at)}
+                        </TableCell>
+                        <TableCell>
+                          <Badge
+                            variant="outline"
+                            className={
+                              entry.type === "topup"
+                                ? "border-green-500/30 bg-green-500/10 text-green-400"
+                                : entry.type === "included"
+                                ? "border-indigo-500/30 bg-indigo-500/10 text-indigo-400"
+                                : entry.type === "usage"
+                                ? "border-blue-500/30 bg-blue-500/10 text-blue-400"
+                                : entry.type === "refund"
+                                ? "border-amber-500/30 bg-amber-500/10 text-amber-400"
+                                : entry.type === "payment"
+                                ? "border-green-500/30 bg-green-500/10 text-green-400"
+                                : "border-slate-500/30 bg-slate-500/10 text-slate-400"
+                            }
+                          >
+                            {entry.type}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-slate-300">
+                          {entry.description || "-"}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div>
+                            <span className={`font-medium ${entry.amount >= 0 ? "text-green-400" : "text-red-400"}`}>
+                              {entry.amount >= 0 ? "+" : ""}
+                              {entry.amount.toLocaleString()}
+                            </span>
+                            <p className="text-xs text-slate-500">
+                              (RM {Math.abs(entry.amount / 10).toFixed(2)})
+                            </p>
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div>
+                            <span className="text-slate-300">{entry.balance_after.toLocaleString()}</span>
+                            <p className="text-xs text-slate-500">
+                              (RM {(entry.balance_after / 10).toFixed(2)})
+                            </p>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Generate Invoice Modal */}
+        <GenerateInvoiceModal
+          clientId={client.id}
+          clientName={client.name}
+          open={generateInvoiceModalOpen}
+          onOpenChange={setGenerateInvoiceModalOpen}
+          onInvoiceGenerated={fetchInvoices}
+        />
+
+        {/* Record Payment Modal */}
+        <RecordPaymentModal
+          clientId={client.id}
+          invoiceId={selectedInvoiceId}
+          open={recordPaymentModalOpen}
+          onOpenChange={setRecordPaymentModalOpen}
+          onPaymentRecorded={() => {
+            fetchInvoices();
+            // Also refresh credit ledger
+            apiClient<{ balance: number; entries: CreditEntry[] }>(
+              `/api/admin/clients/${client.id}/credits`
+            )
+              .then((data) => {
+                setCreditBalance(data.balance);
+                setCreditEntries(data.entries);
+              })
+              .catch(console.error);
+          }}
+        />
       </TabsContent>
 
       <TabsContent value="pricing">

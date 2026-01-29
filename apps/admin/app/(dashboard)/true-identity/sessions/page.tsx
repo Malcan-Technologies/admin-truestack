@@ -12,17 +12,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Input } from "@/components/ui/input";
+import { SearchFilterBar, FilterOption } from "@/components/ui/search-filter-bar";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
-  Search,
-  RefreshCw,
   CheckCircle,
   XCircle,
   Clock,
@@ -32,9 +23,10 @@ import {
   ChevronLeft,
   ChevronRight,
   FileCheck,
+  RefreshCw,
 } from "lucide-react";
 import Link from "next/link";
-import { apiClient } from "@/lib/utils";
+import { apiClient, formatDateTime } from "@/lib/utils";
 import { toast } from "sonner";
 import { KycSessionDetailModal } from "@/components/kyc/kyc-session-detail-modal";
 
@@ -79,6 +71,15 @@ function getStatusIcon(status: string, result: string | null) {
   }
   return <Clock className="h-4 w-4 text-amber-400" />;
 }
+
+const STATUS_FILTER_OPTIONS: FilterOption[] = [
+  { value: "all", label: "All Statuses" },
+  { value: "approved", label: "Approved" },
+  { value: "rejected", label: "Rejected" },
+  { value: "pending", label: "Pending" },
+  { value: "processing", label: "Processing" },
+  { value: "expired", label: "Expired" },
+];
 
 function getStatusBadge(status: string, result: string | null) {
   if (status === "completed") {
@@ -160,11 +161,6 @@ export default function SessionsPage() {
     fetchSessions();
   }, [fetchSessions]);
 
-  const handleSearch = (e: React.FormEvent) => {
-    e.preventDefault();
-    fetchSessions(1);
-  };
-
   const openSessionDetail = (sessionId: string) => {
     setSelectedSessionId(sessionId);
     setModalOpen(true);
@@ -177,55 +173,20 @@ export default function SessionsPage() {
         description="View and manage all TrueIdentity KYC verification sessions across all clients."
       />
 
-      {/* Search/Filter Bar */}
-      <div className="mb-6 flex flex-col gap-4 md:flex-row md:items-center">
-        <form onSubmit={handleSearch} className="relative flex-1 max-w-md">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-          <Input
-            placeholder="Search by name, number, or ref ID..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="border-slate-700 bg-slate-800 pl-10 text-white placeholder:text-slate-500"
-          />
-        </form>
-
-        <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="w-[180px] border-slate-700 bg-slate-800 text-white">
-            <SelectValue placeholder="Filter by status" />
-          </SelectTrigger>
-          <SelectContent className="border-slate-700 bg-slate-800">
-            <SelectItem value="all" className="text-white hover:bg-slate-700">
-              All Statuses
-            </SelectItem>
-            <SelectItem value="approved" className="text-white hover:bg-slate-700">
-              Approved
-            </SelectItem>
-            <SelectItem value="rejected" className="text-white hover:bg-slate-700">
-              Rejected
-            </SelectItem>
-            <SelectItem value="pending" className="text-white hover:bg-slate-700">
-              Pending
-            </SelectItem>
-            <SelectItem value="processing" className="text-white hover:bg-slate-700">
-              Processing
-            </SelectItem>
-            <SelectItem value="expired" className="text-white hover:bg-slate-700">
-              Expired
-            </SelectItem>
-          </SelectContent>
-        </Select>
-
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => fetchSessions(pagination.page)}
-          disabled={loading}
-          className="border-slate-700 bg-transparent text-slate-300 hover:bg-slate-800 hover:text-white"
-        >
-          <RefreshCw className={`mr-2 h-4 w-4 ${loading ? "animate-spin" : ""}`} />
-          Refresh
-        </Button>
-      </div>
+      {/* Search/Filter/Refresh Bar */}
+      <SearchFilterBar
+        searchValue={search}
+        onSearchChange={setSearch}
+        searchPlaceholder="Search by name, number, or ref ID..."
+        onSearchSubmit={() => fetchSessions(1)}
+        filterValue={statusFilter}
+        onFilterChange={setStatusFilter}
+        filterOptions={STATUS_FILTER_OPTIONS}
+        filterPlaceholder="Filter by status"
+        onRefresh={() => fetchSessions(pagination.page)}
+        refreshing={loading}
+        className="mb-6"
+      />
 
       {loading ? (
         <div className="flex items-center justify-center py-12">
@@ -305,7 +266,7 @@ export default function SessionsPage() {
                       )}
                     </TableCell>
                     <TableCell className="text-slate-400">
-                      {new Date(session.created_at).toLocaleString()}
+                      {formatDateTime(session.created_at)}
                     </TableCell>
                     <TableCell className="text-right">
                       <Button

@@ -7,6 +7,7 @@ const nextConfig: NextConfig = {
   // Disable x-powered-by header for security
   poweredByHeader: false,
   
+  
   // Transpile shared package
   transpilePackages: ["@truestack/shared"],
   

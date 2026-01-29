@@ -92,7 +92,7 @@ export function Sidebar() {
     <aside className="fixed left-0 top-0 z-40 h-screen w-64 border-r border-slate-800 bg-slate-950">
       {/* Logo */}
       <div className="flex h-16 items-center border-b border-slate-800 px-6">
-        <Link href="/clients" className="flex items-center gap-3">
+        <Link href="/" className="flex items-center gap-3">
           <Image
             src="/truestack-white.svg"
             alt="TrueStack"

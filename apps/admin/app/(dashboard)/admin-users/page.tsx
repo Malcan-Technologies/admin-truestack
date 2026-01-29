@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -30,6 +30,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Card, CardContent } from "@/components/ui/card";
+import { SearchFilterBar, FilterOption } from "@/components/ui/search-filter-bar";
+import { formatDate } from "@/lib/utils";
 import {
   Loader2,
   Plus,
@@ -55,6 +57,13 @@ type AdminRole = (typeof ADMIN_ROLES)[number]["value"] | "super_admin";
 
 // Roles that have admin privileges (can manage other users)
 const PRIVILEGED_ROLES = ["admin", "super_admin"];
+
+const ROLE_FILTER_OPTIONS: FilterOption[] = [
+  { value: "all", label: "All Roles" },
+  { value: "admin", label: "Admin" },
+  { value: "ops", label: "Operations" },
+  { value: "finance", label: "Finance" },
+];
 
 interface AdminUser {
   id: string;
@@ -137,6 +146,27 @@ export default function AdminUsersPage() {
   const [error, setError] = useState<string | null>(null);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<AdminUser | null>(null);
+  const [search, setSearch] = useState("");
+  const [roleFilter, setRoleFilter] = useState("all");
+
+  // Filter users based on search and role
+  const filteredUsers = useMemo(() => {
+    return users.filter((user) => {
+      // Role filter
+      if (roleFilter !== "all" && user.role !== roleFilter) {
+        return false;
+      }
+      // Search filter
+      if (search) {
+        const searchLower = search.toLowerCase();
+        return (
+          user.name.toLowerCase().includes(searchLower) ||
+          user.email.toLowerCase().includes(searchLower)
+        );
+      }
+      return true;
+    });
+  }, [users, search, roleFilter]);
 
   const fetchUsers = useCallback(async () => {
     try {
@@ -201,23 +231,36 @@ export default function AdminUsersPage() {
       <PageHeader
         title="Admin Users"
         description="Manage admin users and their roles."
-        actions={
-          <Dialog open={isCreateModalOpen} onOpenChange={setIsCreateModalOpen}>
-            <DialogTrigger asChild>
-              <Button className="bg-gradient-to-r from-indigo-500 to-violet-500 text-white hover:from-indigo-600 hover:to-violet-600">
-                <Plus className="mr-2 h-4 w-4" />
-                Add Admin User
-              </Button>
-            </DialogTrigger>
-            <CreateAdminUserModal
-              onSuccess={() => {
-                setIsCreateModalOpen(false);
-                fetchUsers();
-              }}
-              onClose={() => setIsCreateModalOpen(false)}
-            />
-          </Dialog>
-        }
+      >
+        <Dialog open={isCreateModalOpen} onOpenChange={setIsCreateModalOpen}>
+          <DialogTrigger asChild>
+            <Button className="bg-gradient-to-r from-indigo-500 to-violet-500 text-white hover:from-indigo-600 hover:to-violet-600">
+              <Plus className="mr-2 h-4 w-4" />
+              Add Admin User
+            </Button>
+          </DialogTrigger>
+          <CreateAdminUserModal
+            onSuccess={() => {
+              setIsCreateModalOpen(false);
+              fetchUsers();
+            }}
+            onClose={() => setIsCreateModalOpen(false)}
+          />
+        </Dialog>
+      </PageHeader>
+
+      {/* Search/Filter/Refresh Bar */}
+      <SearchFilterBar
+        searchValue={search}
+        onSearchChange={setSearch}
+        searchPlaceholder="Search by name or email..."
+        filterValue={roleFilter}
+        onFilterChange={setRoleFilter}
+        filterOptions={ROLE_FILTER_OPTIONS}
+        filterPlaceholder="Filter by role"
+        onRefresh={fetchUsers}
+        refreshing={loading}
+        className="mb-6"
       />
 
       <Card className="border-slate-800 bg-slate-900/50">
@@ -238,12 +281,16 @@ export default function AdminUsersPage() {
                 Retry
               </Button>
             </div>
-          ) : users.length === 0 ? (
+          ) : filteredUsers.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-12">
               <UserPlus className="h-12 w-12 text-slate-600" />
-              <p className="mt-4 text-slate-400">No admin users yet.</p>
+              <p className="mt-4 text-slate-400">
+                {users.length === 0 ? "No admin users yet." : "No users found."}
+              </p>
               <p className="text-sm text-slate-500">
-                Create your first admin user to get started.
+                {users.length === 0
+                  ? "Create your first admin user to get started."
+                  : "Try adjusting your search or filter criteria."}
               </p>
             </div>
           ) : (
@@ -259,7 +306,7 @@ export default function AdminUsersPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {users.map((user) => {
+                {filteredUsers.map((user) => {
                   const RoleIcon = getRoleIcon(user.role);
                   const isSelf = user.id === currentUser?.id;
                   const isSuperAdmin = user.role === "super_admin";
@@ -310,7 +357,7 @@ export default function AdminUsersPage() {
                         )}
                       </TableCell>
                       <TableCell className="text-slate-400">
-                        {new Date(user.createdAt).toLocaleDateString()}
+                        {formatDate(user.createdAt)}
                       </TableCell>
                       <TableCell>
                         {canEdit ? (

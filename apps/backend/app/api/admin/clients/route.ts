@@ -26,6 +26,10 @@ export async function GET(request: NextRequest) {
       sessions_count: number;
       billed_total: number;
       billed_mtd: number;
+      unpaid_invoice_count: number;
+      unpaid_amount_credits: number;
+      has_overdue_invoice: boolean;
+      oldest_overdue_days: number | null;
     }>(`
       SELECT 
         c.id,
@@ -57,8 +61,25 @@ export async function GET(request: NextRequest) {
             AND billed = true
             AND updated_at >= date_trunc('month', NOW() AT TIME ZONE 'Asia/Kuala_Lumpur') AT TIME ZONE 'Asia/Kuala_Lumpur'
             AND updated_at < (date_trunc('month', NOW() AT TIME ZONE 'Asia/Kuala_Lumpur') + INTERVAL '1 month') AT TIME ZONE 'Asia/Kuala_Lumpur'
-        ), 0) as billed_mtd
+        ), 0) as billed_mtd,
+        COALESCE(unpaid.count, 0) as unpaid_invoice_count,
+        COALESCE(unpaid.total, 0) as unpaid_amount_credits,
+        COALESCE(unpaid.has_overdue, false) as has_overdue_invoice,
+        unpaid.oldest_overdue_days
       FROM client c
+      LEFT JOIN (
+        SELECT 
+          client_id, 
+          COUNT(*) as count,
+          SUM(amount_due_credits - amount_paid_credits) as total,
+          BOOL_OR(due_date < CURRENT_DATE) as has_overdue,
+          MAX(CASE WHEN due_date < CURRENT_DATE 
+              THEN CURRENT_DATE - due_date 
+              ELSE NULL END) as oldest_overdue_days
+        FROM invoice 
+        WHERE status IN ('generated', 'partial')
+        GROUP BY client_id
+      ) unpaid ON unpaid.client_id = c.id
       ORDER BY c.created_at DESC
     `);
 

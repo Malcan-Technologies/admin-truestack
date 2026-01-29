@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Settings } from "lucide-react";
 import { ClientDetailTabs } from "@/components/clients/client-detail-tabs";
+import { formatDate } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
@@ -95,7 +96,7 @@ export default async function ClientDetailPage({
               {client.code}
             </code>
             <span className="mx-2">•</span>
-            Created {new Date(client.created_at).toLocaleDateString()}
+            Created {formatDate(client.created_at)}
           </p>
         </div>
         <Button

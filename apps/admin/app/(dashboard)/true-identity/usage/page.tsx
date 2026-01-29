@@ -26,7 +26,7 @@ import {
   TrendingUp,
   Building2,
 } from "lucide-react";
-import { apiClient } from "@/lib/utils";
+import { apiClient, TIMEZONE } from "@/lib/utils";
 import { toast } from "sonner";
 
 type UsageStats = {
@@ -81,8 +81,9 @@ export default function UsagePage() {
     fetchUsage();
   }, [fetchUsage]);
 
-  const currentMonth = new Date().toLocaleString("en-US", {
+  const currentMonth = new Date().toLocaleString("en-MY", {
     month: "long",
+    timeZone: TIMEZONE,
     year: "numeric",
   });
 

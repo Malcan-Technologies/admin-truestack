@@ -24,7 +24,7 @@ import {
   AlertCircle,
   ExternalLink,
 } from "lucide-react";
-import { apiClient } from "@/lib/utils";
+import { apiClient, formatDateTime } from "@/lib/utils";
 import { toast } from "sonner";
 
 type KycSessionDetail = {
@@ -329,13 +329,13 @@ export function KycSessionDetailModal({
                     <div className="flex justify-between">
                       <span className="text-slate-400">Created</span>
                       <span className="text-white">
-                        {new Date(session.created_at).toLocaleString()}
+                        {formatDateTime(session.created_at)}
                       </span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-slate-400">Updated</span>
                       <span className="text-white">
-                        {new Date(session.updated_at).toLocaleString()}
+                        {formatDateTime(session.updated_at)}
                       </span>
                     </div>
                     <div className="flex justify-between items-center">
@@ -626,7 +626,7 @@ export function KycSessionDetailModal({
                     <div className="flex justify-between">
                       <span className="text-slate-400">Delivered At</span>
                       <span className="text-white">
-                        {new Date(session.webhook_delivered_at).toLocaleString()}
+                        {formatDateTime(session.webhook_delivered_at)}
                       </span>
                     </div>
                   )}

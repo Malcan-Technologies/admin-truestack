@@ -45,7 +45,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { toast } from "sonner";
-import { apiClient } from "@/lib/utils";
+import { apiClient, formatDate, formatDateTime, TIMEZONE } from "@/lib/utils";
 
 type CreditEntry = {
   id: string;
@@ -634,7 +634,7 @@ export default function TrueIdentityDemoPage() {
             <div className="flex items-center justify-between">
               <span className="text-sm text-slate-400">Created</span>
               <span className="text-sm text-white">
-                {demoData?.client.createdAt ? new Date(demoData.client.createdAt).toLocaleDateString() : "-"}
+                {demoData?.client.createdAt ? formatDate(demoData.client.createdAt) : "-"}
               </span>
             </div>
           </CardContent>
@@ -980,7 +980,7 @@ export default function TrueIdentityDemoPage() {
                       <div>
                         <span className="text-xs text-slate-500">Expires</span>
                         <p className="text-sm text-white">
-                          {new Date(currentSession.expires_at).toLocaleString()}
+                          {formatDateTime(currentSession.expires_at)}
                         </p>
                       </div>
                     </div>
@@ -1153,7 +1153,7 @@ export default function TrueIdentityDemoPage() {
                                 : session.status}
                             </Badge>
                             <span className="text-xs text-slate-500">
-                              {new Date(session.created_at).toLocaleDateString()}
+                              {formatDateTime(session.created_at)}
                             </span>
                           </div>
                         </SelectItem>
@@ -1377,7 +1377,7 @@ export default function TrueIdentityDemoPage() {
                           <div className="flex justify-between">
                             <span className="text-slate-400">Delivered At</span>
                             <span className="text-white">
-                              {new Date(webhookData.session.webhook_delivered_at).toLocaleString()}
+                              {formatDateTime(webhookData.session.webhook_delivered_at)}
                             </span>
                           </div>
                         )}
@@ -1634,7 +1634,7 @@ export default function TrueIdentityDemoPage() {
                           {webhook.event}
                         </Badge>
                         <span className="text-xs text-slate-500">
-                          {new Date(webhook.received_at).toLocaleString()}
+                          {formatDateTime(webhook.received_at)}
                         </span>
                       </div>
                       <pre className="text-xs text-slate-400 overflow-auto max-h-48 p-3 rounded bg-slate-900">
@@ -1679,7 +1679,7 @@ export default function TrueIdentityDemoPage() {
             <Card className="border-slate-800 bg-slate-900/50">
               <CardContent className="pt-4">
                 <div className="text-center">
-                  <p className="text-xs text-slate-400">Billed (MTD - {new Date().toLocaleString("en-US", { month: "short" })})</p>
+                  <p className="text-xs text-slate-400">Billed (MTD - {new Date().toLocaleString("en-MY", { month: "short", timeZone: TIMEZONE })})</p>
                   <p className="text-2xl font-bold text-green-400">{demoData?.sessionStats?.billedMtd || 0}</p>
                 </div>
               </CardContent>
@@ -1723,7 +1723,7 @@ export default function TrueIdentityDemoPage() {
                     {demoData.creditLedger.map((entry) => (
                       <TableRow key={entry.id} className="border-slate-800">
                         <TableCell className="text-slate-400 text-sm">
-                          {new Date(entry.created_at).toLocaleString()}
+                          {formatDateTime(entry.created_at)}
                         </TableCell>
                         <TableCell>
                           <Badge
@@ -1818,7 +1818,7 @@ export default function TrueIdentityDemoPage() {
                       {getStatusBadge(session.status, session.result)}
                     </TableCell>
                     <TableCell className="text-slate-400 text-sm">
-                      {new Date(session.created_at).toLocaleDateString()}
+                      {formatDateTime(session.created_at)}
                     </TableCell>
                   </TableRow>
                 ))}
