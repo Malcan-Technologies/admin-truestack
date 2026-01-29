@@ -46,7 +46,7 @@ export interface InvoiceData {
 export interface ReceiptData {
   receiptNumber: string;
   paymentDate: Date;
-  invoiceNumber?: string; // Optional - not present for advance payments
+  invoiceNumber: string;
   client: {
     name: string;
     code: string;
@@ -61,7 +61,6 @@ export interface ReceiptData {
     reference?: string;
   };
   newBalance: number;
-  isAdvancePayment?: boolean; // True for prepayments without invoice
 }
 
 // ============================================
@@ -456,26 +455,17 @@ export async function generateReceiptPDF(data: ReceiptData): Promise<Buffer> {
   page.drawText("Payment Date:", { x: detailsX, y: detailsY, size: 10, font: helvetica, color: colors.gray });
   page.drawText(formatDate(data.paymentDate), { x: detailsX + 80, y: detailsY, size: 10, font: helvetica, color: colors.dark });
 
-  let detailOffset = 15;
-  if (data.isAdvancePayment) {
-    page.drawText("Type:", { x: detailsX, y: detailsY - detailOffset, size: 10, font: helvetica, color: colors.gray });
-    page.drawText("Advance Payment", { x: detailsX + 80, y: detailsY - detailOffset, size: 10, font: helveticaBold, color: colors.primary });
-    detailOffset += 15;
-  } else if (data.invoiceNumber) {
-    page.drawText("Invoice Ref:", { x: detailsX, y: detailsY - detailOffset, size: 10, font: helvetica, color: colors.gray });
-    page.drawText(data.invoiceNumber, { x: detailsX + 80, y: detailsY - detailOffset, size: 10, font: helvetica, color: colors.dark });
-    detailOffset += 15;
-  }
+  page.drawText("Invoice Ref:", { x: detailsX, y: detailsY - 15, size: 10, font: helvetica, color: colors.gray });
+  page.drawText(data.invoiceNumber, { x: detailsX + 80, y: detailsY - 15, size: 10, font: helvetica, color: colors.dark });
 
   if (data.payment.method) {
-    page.drawText("Method:", { x: detailsX, y: detailsY - detailOffset, size: 10, font: helvetica, color: colors.gray });
-    page.drawText(data.payment.method, { x: detailsX + 80, y: detailsY - detailOffset, size: 10, font: helvetica, color: colors.dark });
-    detailOffset += 15;
+    page.drawText("Method:", { x: detailsX, y: detailsY - 30, size: 10, font: helvetica, color: colors.gray });
+    page.drawText(data.payment.method, { x: detailsX + 80, y: detailsY - 30, size: 10, font: helvetica, color: colors.dark });
   }
 
   if (data.payment.reference) {
-    page.drawText("Reference:", { x: detailsX, y: detailsY - detailOffset, size: 10, font: helvetica, color: colors.gray });
-    page.drawText(data.payment.reference, { x: detailsX + 80, y: detailsY - detailOffset, size: 10, font: helvetica, color: colors.dark });
+    page.drawText("Reference:", { x: detailsX, y: detailsY - 45, size: 10, font: helvetica, color: colors.gray });
+    page.drawText(data.payment.reference, { x: detailsX + 80, y: detailsY - 45, size: 10, font: helvetica, color: colors.dark });
   }
 
   // Divider line after company section

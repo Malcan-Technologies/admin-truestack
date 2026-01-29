@@ -28,7 +28,6 @@ import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { GenerateApiKeyModal } from "./generate-api-key-modal";
 import { TopupCreditsModal } from "./topup-credits-modal";
-import { AdvancePaymentModal } from "./advance-payment-modal";
 import { KycSessionDetailModal } from "./kyc-session-detail-modal";
 import { GenerateInvoiceModal } from "./generate-invoice-modal";
 import { RecordPaymentModal } from "./record-payment-modal";
@@ -1188,22 +1187,6 @@ export function ClientDetailTabs({ client }: ClientDetailTabsProps) {
                   <RefreshCw className={`mr-2 h-4 w-4 ${loadingCredits ? "animate-spin" : ""}`} />
                   Refresh
                 </Button>
-                <AdvancePaymentModal
-                  clientId={client.id}
-                  clientName={client.name}
-                  currentBalance={creditBalance}
-                  onPaymentRecorded={() => {
-                    // Refresh credit ledger
-                    apiClient<{ balance: number; entries: CreditEntry[] }>(
-                      `/api/admin/clients/${client.id}/credits`
-                    )
-                      .then((data) => {
-                        setCreditBalance(data.balance);
-                        setCreditEntries(data.entries);
-                      })
-                      .catch(console.error);
-                  }}
-                />
                 <TopupCreditsModal
                   clientId={client.id}
                   clientName={client.name}
