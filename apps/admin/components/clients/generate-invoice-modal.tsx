@@ -115,6 +115,24 @@ export function GenerateInvoiceModal({
     }
   };
 
+  const handleCleanup = async () => {
+    try {
+      const result = await apiClient<{ deleted: number; invoices: string[] }>(
+        `/api/admin/clients/${clientId}/invoices/cleanup`,
+        { method: "DELETE" }
+      );
+      if (result.deleted > 0) {
+        toast.success(`Cleaned up ${result.deleted} stuck invoice(s)`);
+        // Refresh preview after cleanup
+        fetchPreview();
+      } else {
+        toast.info("No stuck invoices to clean up");
+      }
+    } catch (error) {
+      toast.error("Failed to clean up invoices");
+    }
+  };
+
   const getProductName = (productId: string) => {
     const names: Record<string, string> = {
       true_identity: "TrueIdentity",
@@ -140,13 +158,29 @@ export function GenerateInvoiceModal({
             <RefreshCw className="h-8 w-8 text-slate-600 animate-spin" />
           </div>
         ) : !canGenerate ? (
-          <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-6">
-            <div className="flex items-start gap-3">
-              <AlertCircle className="h-5 w-5 text-amber-400 mt-0.5" />
-              <div>
-                <h3 className="font-medium text-amber-400">Cannot Generate Invoice</h3>
-                <p className="mt-1 text-sm text-amber-300/80">{reason}</p>
+          <div className="space-y-4">
+            <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-6">
+              <div className="flex items-start gap-3">
+                <AlertCircle className="h-5 w-5 text-amber-400 mt-0.5" />
+                <div>
+                  <h3 className="font-medium text-amber-400">Cannot Generate Invoice</h3>
+                  <p className="mt-1 text-sm text-amber-300/80">{reason}</p>
+                </div>
               </div>
+            </div>
+            <div className="rounded-lg border border-slate-700 bg-slate-800/50 p-4">
+              <p className="text-sm text-slate-400 mb-3">
+                If a previous invoice generation failed, there may be a stuck pending invoice blocking new generation.
+              </p>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleCleanup}
+                className="border-slate-600 bg-transparent text-slate-300 hover:bg-slate-700 hover:text-white"
+              >
+                <RefreshCw className="mr-2 h-4 w-4" />
+                Clean Up Stuck Invoices
+              </Button>
             </div>
           </div>
         ) : preview ? (
