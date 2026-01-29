@@ -110,21 +110,23 @@ export async function GET(
       best_frame?: string;
     } | null = null;
 
-    const s3Keys = [
-      kycSession.s3_front_document,
-      kycSession.s3_back_document,
-      kycSession.s3_face_image,
-      kycSession.s3_best_frame,
-    ].filter(Boolean) as string[];
+    const s3KeysMap = {
+      front_document: kycSession.s3_front_document,
+      back_document: kycSession.s3_back_document,
+      face_image: kycSession.s3_face_image,
+      best_frame: kycSession.s3_best_frame,
+    };
 
-    if (s3Keys.length > 0) {
+    const hasAnyKey = Object.values(s3KeysMap).some(Boolean);
+
+    if (hasAnyKey) {
       try {
-        const presignedUrls = await getPresignedUrls(s3Keys);
+        const presignedUrls = await getPresignedUrls(s3KeysMap);
         images = {
-          front_document: kycSession.s3_front_document ? presignedUrls[kycSession.s3_front_document] : undefined,
-          back_document: kycSession.s3_back_document ? presignedUrls[kycSession.s3_back_document] : undefined,
-          face_image: kycSession.s3_face_image ? presignedUrls[kycSession.s3_face_image] : undefined,
-          best_frame: kycSession.s3_best_frame ? presignedUrls[kycSession.s3_best_frame] : undefined,
+          front_document: presignedUrls.front_document ?? undefined,
+          back_document: presignedUrls.back_document ?? undefined,
+          face_image: presignedUrls.face_image ?? undefined,
+          best_frame: presignedUrls.best_frame ?? undefined,
         };
       } catch (error) {
         console.error("Error generating presigned URLs:", error);
