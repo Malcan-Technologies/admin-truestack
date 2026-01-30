@@ -35,8 +35,8 @@ export async function GET(request: NextRequest) {
         COUNT(*) FILTER (WHERE billed = true) as billed_total,
         COUNT(*) FILTER (
           WHERE billed = true
-            AND updated_at >= date_trunc('month', NOW() AT TIME ZONE 'Asia/Kuala_Lumpur') AT TIME ZONE 'Asia/Kuala_Lumpur'
-            AND updated_at < (date_trunc('month', NOW() AT TIME ZONE 'Asia/Kuala_Lumpur') + INTERVAL '1 month') AT TIME ZONE 'Asia/Kuala_Lumpur'
+            AND billed_at >= date_trunc('month', NOW() AT TIME ZONE 'Asia/Kuala_Lumpur') AT TIME ZONE 'Asia/Kuala_Lumpur'
+            AND billed_at < (date_trunc('month', NOW() AT TIME ZONE 'Asia/Kuala_Lumpur') + INTERVAL '1 month') AT TIME ZONE 'Asia/Kuala_Lumpur'
         ) as billed_mtd
       FROM kyc_session
     `);
@@ -65,8 +65,8 @@ export async function GET(request: NextRequest) {
         COUNT(ks.id) FILTER (WHERE ks.billed = true) as billed_total,
         COUNT(ks.id) FILTER (
           WHERE ks.billed = true
-            AND ks.updated_at >= date_trunc('month', NOW() AT TIME ZONE 'Asia/Kuala_Lumpur') AT TIME ZONE 'Asia/Kuala_Lumpur'
-            AND ks.updated_at < (date_trunc('month', NOW() AT TIME ZONE 'Asia/Kuala_Lumpur') + INTERVAL '1 month') AT TIME ZONE 'Asia/Kuala_Lumpur'
+            AND ks.billed_at >= date_trunc('month', NOW() AT TIME ZONE 'Asia/Kuala_Lumpur') AT TIME ZONE 'Asia/Kuala_Lumpur'
+            AND ks.billed_at < (date_trunc('month', NOW() AT TIME ZONE 'Asia/Kuala_Lumpur') + INTERVAL '1 month') AT TIME ZONE 'Asia/Kuala_Lumpur'
         ) as billed_mtd,
         COALESCE((
           SELECT balance_after FROM credit_ledger 

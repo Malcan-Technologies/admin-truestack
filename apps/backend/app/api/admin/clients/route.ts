@@ -59,8 +59,8 @@ export async function GET(request: NextRequest) {
           SELECT COUNT(*) FROM kyc_session 
           WHERE client_id = c.id 
             AND billed = true
-            AND updated_at >= date_trunc('month', NOW() AT TIME ZONE 'Asia/Kuala_Lumpur') AT TIME ZONE 'Asia/Kuala_Lumpur'
-            AND updated_at < (date_trunc('month', NOW() AT TIME ZONE 'Asia/Kuala_Lumpur') + INTERVAL '1 month') AT TIME ZONE 'Asia/Kuala_Lumpur'
+            AND billed_at >= date_trunc('month', NOW() AT TIME ZONE 'Asia/Kuala_Lumpur') AT TIME ZONE 'Asia/Kuala_Lumpur'
+            AND billed_at < (date_trunc('month', NOW() AT TIME ZONE 'Asia/Kuala_Lumpur') + INTERVAL '1 month') AT TIME ZONE 'Asia/Kuala_Lumpur'
         ), 0) as billed_mtd,
         COALESCE(unpaid.count, 0) as unpaid_invoice_count,
         COALESCE(unpaid.total, 0) as unpaid_amount_credits,

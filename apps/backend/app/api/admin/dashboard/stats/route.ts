@@ -38,7 +38,7 @@ export async function GET(request: NextRequest) {
         (SELECT COALESCE(SUM(ABS(amount)), 0) FROM credit_ledger WHERE amount < 0) as total_credits_used,
         (SELECT COUNT(*) FROM kyc_session 
          WHERE billed = true 
-         AND updated_at >= date_trunc('month', NOW() AT TIME ZONE 'Asia/Kuala_Lumpur') AT TIME ZONE 'Asia/Kuala_Lumpur'
+         AND billed_at >= date_trunc('month', NOW() AT TIME ZONE 'Asia/Kuala_Lumpur') AT TIME ZONE 'Asia/Kuala_Lumpur'
         ) as billed_mtd
     `);
 

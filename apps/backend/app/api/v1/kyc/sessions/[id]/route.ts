@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { query, queryOne } from "@truestack/shared/db";
+import { query, queryOne, withTransaction } from "@truestack/shared/db";
 import { hashApiKey } from "@truestack/shared/api-keys";
 import { getInnovatifTransactionStatus } from "@truestack/shared/innovatif";
 import { uploadKycDocument, DocumentType, getPresignedUrls } from "@truestack/shared/s3";
@@ -508,61 +508,62 @@ export async function POST(
       // Only bill on status = 2 (Completed), NOT on expired sessions
       const isBillable = ourStatus === "completed" && !session.billed;
 
-      // Update session with status, S3 paths, and billing flag
-      await query(
-        `UPDATE kyc_session 
-         SET status = $1, 
-             result = $2, 
-             reject_message = COALESCE($3, reject_message),
-             innovatif_response = COALESCE($4::jsonb, innovatif_response),
-             s3_front_document = COALESCE($5, s3_front_document),
-             s3_back_document = COALESCE($6, s3_back_document),
-             s3_face_image = COALESCE($7, s3_face_image),
-             s3_best_frame = COALESCE($8, s3_best_frame),
-             billed = CASE WHEN $10 THEN true ELSE billed END,
-             updated_at = NOW()
-         WHERE id = $9`,
-        [
-          ourStatus,
-          ourResult,
-          rejectMessage,
-          innovatifResponseForDb ? JSON.stringify(innovatifResponseForDb) : null,
-          s3FrontDocument,
-          s3BackDocument,
-          s3FaceImage,
-          s3BestFrame,
-          id,
-          isBillable, // $10 - mark as billed if this is a billable completion
-        ]
-      );
-
-      // Deduct credit if this is a billable completion (webhook was missed)
+      // If billable, perform atomic update + ledger insert in a transaction
+      // This ensures billed=true is only set if the ledger entry succeeds
       if (isBillable) {
         console.log(`Billing session ${id} via get-status (webhook likely missed)`);
         
-        try {
+        await withTransaction(async (txClient) => {
           // Use advisory lock to prevent race conditions with concurrent requests
-          await query(
+          await txClient.query(
             `SELECT pg_advisory_xact_lock(hashtext($1))`,
             [`credit_${session.client_id}_true_identity`]
           );
 
+          // Update session with status, S3 paths, and billing flag atomically
+          await txClient.query(
+            `UPDATE kyc_session 
+             SET status = $1, 
+                 result = $2, 
+                 reject_message = COALESCE($3, reject_message),
+                 innovatif_response = COALESCE($4::jsonb, innovatif_response),
+                 s3_front_document = COALESCE($5, s3_front_document),
+                 s3_back_document = COALESCE($6, s3_back_document),
+                 s3_face_image = COALESCE($7, s3_face_image),
+                 s3_best_frame = COALESCE($8, s3_best_frame),
+                 billed = true,
+                 billed_at = NOW(),
+                 updated_at = NOW()
+             WHERE id = $9`,
+            [
+              ourStatus,
+              ourResult,
+              rejectMessage,
+              innovatifResponseForDb ? JSON.stringify(innovatifResponseForDb) : null,
+              s3FrontDocument,
+              s3BackDocument,
+              s3FaceImage,
+              s3BestFrame,
+              id,
+            ]
+          );
+
           // Get current month's billed session count for this client (for tiered pricing)
           // Use Malaysian timezone (Asia/Kuala_Lumpur, UTC+8) for monthly reset at midnight MYT
-          // IMPORTANT: Count by updated_at (when the session was billed), not created_at
-          // This ensures tiering is based on billing order, not creation order
-          // Exclude current session from count since we already marked it as billed above
-          const usageResult = await queryOne<{ count: string }>(
+          // IMPORTANT: Count by billed_at (when the session was billed), not created_at or updated_at
+          // This ensures tiering is based on billing order and is immutable
+          // Exclude current session from count since we just marked it as billed above
+          const usageResult = await txClient.query<{ count: string }>(
             `SELECT COUNT(*) as count 
              FROM kyc_session 
              WHERE client_id = $1 
                AND id != $2
                AND billed = true
-               AND updated_at >= date_trunc('month', NOW() AT TIME ZONE 'Asia/Kuala_Lumpur') AT TIME ZONE 'Asia/Kuala_Lumpur'
-               AND updated_at < (date_trunc('month', NOW() AT TIME ZONE 'Asia/Kuala_Lumpur') + INTERVAL '1 month') AT TIME ZONE 'Asia/Kuala_Lumpur'`,
+               AND billed_at >= date_trunc('month', NOW() AT TIME ZONE 'Asia/Kuala_Lumpur') AT TIME ZONE 'Asia/Kuala_Lumpur'
+               AND billed_at < (date_trunc('month', NOW() AT TIME ZONE 'Asia/Kuala_Lumpur') + INTERVAL '1 month') AT TIME ZONE 'Asia/Kuala_Lumpur'`,
             [session.client_id, id]
           );
-          const currentMonthUsage = parseInt(usageResult?.count || "0");
+          const currentMonthUsage = parseInt(usageResult.rows[0]?.count || "0");
           
           // Session number is the count of previously billed sessions + 1 (this session)
           const sessionNumber = currentMonthUsage + 1;
@@ -574,7 +575,7 @@ export async function POST(
           // - Tier 2 (min=4, max=6): sessions 4, 5, 6
           // - Tier 3 (min=7, max=NULL): sessions 7+
           // Credit system: 10 credits = RM 1
-          const tierResult = await queryOne<{ credits_per_session: number; tier_name: string }>(
+          const tierResult = await txClient.query<{ credits_per_session: number; tier_name: string }>(
             `SELECT credits_per_session, tier_name
              FROM pricing_tier 
              WHERE client_id = $1 
@@ -590,24 +591,24 @@ export async function POST(
           let creditsToDeduct = 50;
           let tierName = "default";
           
-          if (tierResult) {
-            creditsToDeduct = tierResult.credits_per_session;
-            tierName = tierResult.tier_name;
+          if (tierResult.rows[0]) {
+            creditsToDeduct = tierResult.rows[0].credits_per_session;
+            tierName = tierResult.rows[0].tier_name;
           }
 
           // Get current balance (in credits)
-          const balanceResult = await queryOne<{ balance: string }>(
+          const balanceResult = await txClient.query<{ balance: string }>(
             `SELECT COALESCE(SUM(amount), 0) as balance 
              FROM credit_ledger 
              WHERE client_id = $1 AND product_id = 'true_identity'`,
             [session.client_id]
           );
 
-          const currentBalance = parseInt(balanceResult?.balance || "0");
+          const currentBalance = parseInt(balanceResult.rows[0]?.balance || "0");
           const newBalance = currentBalance - creditsToDeduct;
 
           // Deduct credits based on pricing tier
-          await query(
+          await txClient.query(
             `INSERT INTO credit_ledger 
               (client_id, product_id, amount, balance_after, type, reference_id, description)
              VALUES ($1, 'true_identity', $2, $3, 'usage', $4, $5)`,
@@ -621,11 +622,33 @@ export async function POST(
           );
 
           console.log(`Billed session ${session.id} via get-status: status=${ourStatus}, result=${ourResult}, tier=${tierName}, credits=${creditsToDeduct}, new_balance=${newBalance}`);
-        } catch (billingError) {
-          console.error(`Failed to bill session ${session.id}:`, billingError);
-          // Don't fail the request if billing fails - the session is already marked as billed
-          // so this won't result in duplicate charges
-        }
+        });
+      } else {
+        // Non-billable update (status change only, no ledger entry needed)
+        await query(
+          `UPDATE kyc_session 
+           SET status = $1, 
+               result = $2, 
+               reject_message = COALESCE($3, reject_message),
+               innovatif_response = COALESCE($4::jsonb, innovatif_response),
+               s3_front_document = COALESCE($5, s3_front_document),
+               s3_back_document = COALESCE($6, s3_back_document),
+               s3_face_image = COALESCE($7, s3_face_image),
+               s3_best_frame = COALESCE($8, s3_best_frame),
+               updated_at = NOW()
+           WHERE id = $9`,
+          [
+            ourStatus,
+            ourResult,
+            rejectMessage,
+            innovatifResponseForDb ? JSON.stringify(innovatifResponseForDb) : null,
+            s3FrontDocument,
+            s3BackDocument,
+            s3FaceImage,
+            s3BestFrame,
+            id,
+          ]
+        );
       }
 
       // Build response for client - generate pre-signed URLs for secure, time-limited access

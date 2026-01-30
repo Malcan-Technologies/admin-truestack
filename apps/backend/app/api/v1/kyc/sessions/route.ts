@@ -91,14 +91,14 @@ async function checkCredits(
 
   // Get current month's billed session count to determine applicable tier
   // Use Malaysian timezone (Asia/Kuala_Lumpur, UTC+8) for monthly reset at midnight MYT
-  // Count by updated_at (when billed) to match billing logic
+  // Count by billed_at (immutable billing timestamp) for consistent tiering
   const usageResult = await queryOne<{ count: string }>(
     `SELECT COUNT(*) as count 
      FROM kyc_session 
      WHERE client_id = $1 
        AND billed = true
-       AND updated_at >= date_trunc('month', NOW() AT TIME ZONE 'Asia/Kuala_Lumpur') AT TIME ZONE 'Asia/Kuala_Lumpur'
-       AND updated_at < (date_trunc('month', NOW() AT TIME ZONE 'Asia/Kuala_Lumpur') + INTERVAL '1 month') AT TIME ZONE 'Asia/Kuala_Lumpur'`,
+       AND billed_at >= date_trunc('month', NOW() AT TIME ZONE 'Asia/Kuala_Lumpur') AT TIME ZONE 'Asia/Kuala_Lumpur'
+       AND billed_at < (date_trunc('month', NOW() AT TIME ZONE 'Asia/Kuala_Lumpur') + INTERVAL '1 month') AT TIME ZONE 'Asia/Kuala_Lumpur'`,
     [clientId]
   );
   const currentMonthUsage = parseInt(usageResult?.count || "0");

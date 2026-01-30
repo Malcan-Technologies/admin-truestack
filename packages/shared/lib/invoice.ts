@@ -265,6 +265,7 @@ export async function queryUsageByTier(
   periodEnd: Date
 ): Promise<UsageByTier[]> {
   // Get all billed sessions in the period with their credit ledger entries
+  // Uses ks.billed_at (immutable billing timestamp) to determine which billing period the session belongs to
   const usage = await query<{
     product_id: string;
     tier_name: string | null;
@@ -277,13 +278,13 @@ export async function queryUsageByTier(
         ks.id,
         cl.product_id,
         cl.amount,
-        cl.created_at as billed_at
+        ks.billed_at
       FROM kyc_session ks
       JOIN credit_ledger cl ON cl.reference_id = ks.id AND cl.type = 'usage'
       WHERE ks.client_id = $1
         AND ks.billed = true
-        AND cl.created_at >= $2
-        AND cl.created_at <= $3
+        AND ks.billed_at >= $2
+        AND ks.billed_at <= $3
     ),
     session_tiers AS (
       SELECT 
