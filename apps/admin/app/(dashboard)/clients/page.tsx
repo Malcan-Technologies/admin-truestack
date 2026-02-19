@@ -6,6 +6,11 @@ type Client = {
   name: string;
   code: string;
   status: "active" | "suspended";
+  client_source?: string | null;
+  client_type?: string | null;
+  parent_client_id?: string | null;
+  parent_client_name?: string | null;
+  tenant_slug?: string | null;
   credit_balance: number;
   sessions_count: number;
   billed_total: number;
@@ -41,7 +46,16 @@ async function getClients(): Promise<Client[]> {
   }
 }
 
-export default async function ClientsPage() {
+export default async function ClientsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ source?: string }>;
+}) {
   const clients = await getClients();
-  return <ClientsList clients={clients} />;
+  const params = await searchParams;
+  const initialSourceFilter =
+    params.source === "truestack_kredit" || params.source === "api" ? params.source : "all";
+  return (
+    <ClientsList clients={clients} initialSourceFilter={initialSourceFilter} />
+  );
 }

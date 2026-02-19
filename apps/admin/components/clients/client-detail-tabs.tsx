@@ -31,6 +31,7 @@ import { TopupCreditsModal } from "./topup-credits-modal";
 import { KycSessionDetailModal } from "./kyc-session-detail-modal";
 import { GenerateInvoiceModal } from "./generate-invoice-modal";
 import { RecordPaymentModal } from "./record-payment-modal";
+import { MarkAsPaidModal } from "./mark-as-paid-modal";
 import { apiClient, formatDate, formatDateTime, TIMEZONE } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -40,6 +41,7 @@ type Client = {
   name: string;
   code: string;
   status: "active" | "suspended";
+  client_source?: string | null;
   contact_email: string | null;
   contact_phone: string | null;
   company_registration: string | null;
@@ -142,6 +144,18 @@ type Payment = {
   receiptUrl: string | null;
 };
 
+type TenantBillingPeriod = {
+  id: string;
+  period_start: string;
+  period_end: string;
+  verification_count: number;
+  usage_amount_myr: number;
+  payment_status: string;
+  paid_at: string | null;
+  paid_amount_myr: number | null;
+  webhook_delivered: boolean;
+};
+
 interface ClientDetailTabsProps {
   client: Client;
 }
@@ -184,6 +198,11 @@ export function ClientDetailTabs({ client }: ClientDetailTabsProps) {
   const [invoicePayments, setInvoicePayments] = useState<Record<string, Payment[]>>({});
   const [loadingPayments, setLoadingPayments] = useState<string | null>(null);
 
+  // Kredit Mark as Paid
+  const [markAsPaidModalOpen, setMarkAsPaidModalOpen] = useState(false);
+  const [tenantBillingPeriods, setTenantBillingPeriods] = useState<TenantBillingPeriod[]>([]);
+  const [loadingTenantPeriods, setLoadingTenantPeriods] = useState(false);
+
   // Fetch KYC sessions
   const fetchKycSessions = useCallback(async (page = 1) => {
     setLoadingKycSessions(true);
@@ -208,6 +227,21 @@ export function ClientDetailTabs({ client }: ClientDetailTabsProps) {
   };
 
   // Fetch invoices
+  const fetchTenantBillingPeriods = useCallback(async () => {
+    if ((client.client_source ?? "api") !== "truestack_kredit") return;
+    setLoadingTenantPeriods(true);
+    try {
+      const data = await apiClient<{ periods: TenantBillingPeriod[] }>(
+        `/api/admin/clients/${client.id}/tenant-billing-periods`
+      );
+      setTenantBillingPeriods(data.periods);
+    } catch (error) {
+      console.error("Error fetching tenant billing periods:", error);
+    } finally {
+      setLoadingTenantPeriods(false);
+    }
+  }, [client.id, client.client_source]);
+
   const fetchInvoices = useCallback(async () => {
     setLoadingInvoices(true);
     try {
@@ -522,7 +556,12 @@ export function ClientDetailTabs({ client }: ClientDetailTabsProps) {
 
     // Fetch invoices
     fetchInvoices();
-  }, [client.id, fetchKycSessions, fetchInvoices]);
+
+    // Fetch tenant billing periods for Kredit clients
+    if ((client.client_source ?? "api") === "truestack_kredit") {
+      fetchTenantBillingPeriods();
+    }
+  }, [client.id, client.client_source, fetchKycSessions, fetchInvoices, fetchTenantBillingPeriods]);
 
   return (
     <Tabs defaultValue="overview" className="space-y-6">
@@ -948,6 +987,98 @@ export function ClientDetailTabs({ client }: ClientDetailTabsProps) {
 
       <TabsContent value="billing">
         <div className="space-y-6">
+          {/* Kredit Mark as Paid Section - only for truestack_kredit clients */}
+          {(client.client_source ?? "api") === "truestack_kredit" && (
+            <Card className="border-slate-800 bg-slate-900/50">
+              <CardHeader className="flex flex-row items-center justify-between">
+                <div>
+                  <CardTitle className="text-white">TrueStack Kredit Billing</CardTitle>
+                  <CardDescription className="text-slate-400">
+                    Mark billing periods as paid. A signed webhook will be sent to Kredit.
+                  </CardDescription>
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    size="sm"
+                    onClick={() => setMarkAsPaidModalOpen(true)}
+                    className="bg-green-600 text-white hover:bg-green-700"
+                  >
+                    <CheckCircle className="mr-2 h-4 w-4" />
+                    Mark as Paid
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={fetchTenantBillingPeriods}
+                    disabled={loadingTenantPeriods}
+                    className="border-slate-700 bg-transparent text-slate-300 hover:bg-slate-800 hover:text-white"
+                  >
+                    <RefreshCw className={`mr-2 h-4 w-4 ${loadingTenantPeriods ? "animate-spin" : ""}`} />
+                    Refresh
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent>
+                {loadingTenantPeriods ? (
+                  <p className="text-sm text-slate-400">Loading billing periods...</p>
+                ) : tenantBillingPeriods.length === 0 ? (
+                  <p className="text-sm text-slate-400">
+                    No billing periods recorded yet. Use &quot;Mark as Paid&quot; to record a payment.
+                  </p>
+                ) : (
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="border-slate-800 hover:bg-transparent">
+                        <TableHead className="text-slate-400">Period</TableHead>
+                        <TableHead className="text-slate-400">Status</TableHead>
+                        <TableHead className="text-slate-400">Paid At</TableHead>
+                        <TableHead className="text-slate-400">Webhook</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {tenantBillingPeriods.map((p) => (
+                        <TableRow key={p.id} className="border-slate-800">
+                          <TableCell className="text-slate-300">
+                            {formatDate(p.period_start)} - {formatDate(p.period_end)}
+                          </TableCell>
+                          <TableCell>
+                            <Badge
+                              className={
+                                p.payment_status === "paid"
+                                  ? "border-green-500/30 bg-green-500/10 text-green-400"
+                                  : "border-slate-500/30 bg-slate-500/10 text-slate-400"
+                              }
+                            >
+                              {p.payment_status}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-slate-400">
+                            {p.paid_at ? formatDateTime(p.paid_at) : "-"}
+                          </TableCell>
+                          <TableCell>
+                            {p.payment_status === "paid" ? (
+                              p.webhook_delivered ? (
+                                <Badge className="border-green-500/30 bg-green-500/10 text-green-400">
+                                  Delivered
+                                </Badge>
+                              ) : (
+                                <Badge className="border-amber-500/30 bg-amber-500/10 text-amber-400">
+                                  Failed
+                                </Badge>
+                              )
+                            ) : (
+                              "-"
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
           {/* Invoices Section */}
           <Card className="border-slate-800 bg-slate-900/50">
             <CardHeader className="flex flex-row items-center justify-between">
@@ -968,14 +1099,16 @@ export function ClientDetailTabs({ client }: ClientDetailTabsProps) {
                   <RefreshCw className={`mr-2 h-4 w-4 ${loadingInvoices ? "animate-spin" : ""}`} />
                   Refresh
                 </Button>
-                <Button
-                  size="sm"
-                  onClick={() => setGenerateInvoiceModalOpen(true)}
-                  className="bg-linear-to-r from-indigo-500 to-violet-500 text-white hover:from-indigo-600 hover:to-violet-600"
-                >
-                  <FileText className="mr-2 h-4 w-4" />
-                  Generate Invoice
-                </Button>
+                {(client.client_source ?? "api") !== "truestack_kredit" && (
+                  <Button
+                    size="sm"
+                    onClick={() => setGenerateInvoiceModalOpen(true)}
+                    className="bg-linear-to-r from-indigo-500 to-violet-500 text-white hover:from-indigo-600 hover:to-violet-600"
+                  >
+                    <FileText className="mr-2 h-4 w-4" />
+                    Generate Invoice
+                  </Button>
+                )}
               </div>
             </CardHeader>
             <CardContent>
@@ -1293,6 +1426,15 @@ export function ClientDetailTabs({ client }: ClientDetailTabsProps) {
           open={generateInvoiceModalOpen}
           onOpenChange={setGenerateInvoiceModalOpen}
           onInvoiceGenerated={fetchInvoices}
+        />
+
+        {/* Mark as Paid Modal (Kredit) */}
+        <MarkAsPaidModal
+          clientId={client.id}
+          clientName={client.name}
+          open={markAsPaidModalOpen}
+          onOpenChange={setMarkAsPaidModalOpen}
+          onMarked={fetchTenantBillingPeriods}
         />
 
         {/* Record Payment Modal */}

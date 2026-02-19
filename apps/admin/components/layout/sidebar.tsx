@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import {
   LayoutDashboard,
   Users,
@@ -43,6 +43,7 @@ const navSections: NavSection[] = [
     title: "CLIENTS",
     items: [
       { title: "All Clients", href: "/clients", icon: Users },
+      { title: "TrueStack Kredit", href: "/clients?source=truestack_kredit", icon: Users },
     ],
   },
   {
@@ -74,6 +75,7 @@ const navSections: NavSection[] = [
 
 export function Sidebar() {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({});
 
   const toggleSection = (title: string) => {
@@ -135,9 +137,17 @@ export function Sidebar() {
               {!collapsedSections[section.title] && (
                 <div className="space-y-1">
                   {section.items.map((item) => {
-                    const isActive =
-                      pathname === item.href ||
-                      (item.href !== "/" && pathname.startsWith(item.href));
+                    const baseHref = item.href.split("?")[0];
+                    const sourceParam = searchParams.get("source");
+                    const isKreditLink = item.href.includes("source=truestack_kredit");
+                    const isKreditView =
+                      pathname.startsWith("/clients") && sourceParam === "truestack_kredit";
+                    const isActive = isKreditLink
+                      ? isKreditView
+                      : pathname === item.href ||
+                        (item.href !== "/" &&
+                          pathname.startsWith(baseHref) &&
+                          (baseHref !== "/clients" || !isKreditView));
                     const Icon = item.icon;
                     return (
                       <Link

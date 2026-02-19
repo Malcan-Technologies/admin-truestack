@@ -22,6 +22,11 @@ export async function GET(request: NextRequest) {
       notes: string | null;
       created_at: string;
       updated_at: string;
+      client_source: string | null;
+      client_type: string | null;
+      parent_client_id: string | null;
+      parent_client_name: string | null;
+      tenant_slug: string | null;
       credit_balance: number;
       sessions_count: number;
       billed_total: number;
@@ -42,6 +47,11 @@ export async function GET(request: NextRequest) {
         c.notes,
         c.created_at,
         c.updated_at,
+        COALESCE(c.client_source, 'api') as client_source,
+        COALESCE(c.client_type, 'direct') as client_type,
+        c.parent_client_id,
+        parent.name as parent_client_name,
+        c.tenant_slug,
         COALESCE((
           SELECT balance_after FROM credit_ledger 
           WHERE client_id = c.id AND product_id = 'true_identity'
@@ -67,6 +77,7 @@ export async function GET(request: NextRequest) {
         COALESCE(unpaid.has_overdue, false) as has_overdue_invoice,
         unpaid.oldest_overdue_days
       FROM client c
+      LEFT JOIN client parent ON parent.id = c.parent_client_id
       LEFT JOIN (
         SELECT 
           client_id, 

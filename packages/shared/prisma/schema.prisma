@@ -122,6 +122,10 @@ model Client {
   id                  String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   name                String
   code                String   @unique // e.g., 'ACME'
+  clientType          String   @default("direct") @map("client_type") // parent, tenant, direct
+  clientSource        String   @default("api") @map("client_source") // api, truestack_kredit
+  parentClientId      String?  @map("parent_client_id") @db.Uuid
+  tenantSlug          String?  @unique @map("tenant_slug") // Kredit tenant identifier for lookup
   contactEmail        String?  @map("contact_email")
   contactPhone        String?  @map("contact_phone")
   companyRegistration String?  @map("company_registration") // SSM number
@@ -132,7 +136,9 @@ model Client {
   createdBy           String?  @map("created_by")
 
   // Relations
-  createdByUser        User?                 @relation("ClientCreatedBy", fields: [createdBy], references: [id])
+  parentClient        Client?  @relation("ClientHierarchy", fields: [parentClientId], references: [id])
+  childClients        Client[] @relation("ClientHierarchy")
+  createdByUser       User?                 @relation("ClientCreatedBy", fields: [createdBy], references: [id])
   apiKeys              ClientApiKey[]
   productConfigs       ClientProductConfig[]
   creditLedgerEntries  CreditLedger[]
@@ -140,9 +146,13 @@ model Client {
   pricingTiers         PricingTier[]
   invoices             Invoice[]
   payments             Payment[]
+  tenantBillingPeriods TenantBillingPeriod[]
 
   @@index([code])
   @@index([status])
+  @@index([clientSource])
+  @@index([parentClientId])
+  @@index([tenantSlug])
   @@map("client")
 }
 
@@ -323,6 +333,31 @@ model PricingTier {
   @@unique([clientId, productId, minVolume])
   @@index([clientId, productId])
   @@map("pricing_tier")
+}
+
+// ============================================
+// Tenant Billing Period (Kredit payment tracking)
+// ============================================
+
+model TenantBillingPeriod {
+  id                 String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  clientId           String    @map("client_id") @db.Uuid
+  periodStart        DateTime  @map("period_start") @db.Date
+  periodEnd          DateTime  @map("period_end") @db.Date
+  verificationCount  Int       @default(0) @map("verification_count")
+  usageAmountMyr     Decimal   @default(0) @map("usage_amount_myr") @db.Decimal(10, 2)
+  paymentStatus      String    @default("pending") @map("payment_status") // pending, paid
+  paidAt             DateTime? @map("paid_at")
+  paidAmountMyr      Decimal?  @map("paid_amount_myr") @db.Decimal(10, 2)
+  webhookDelivered   Boolean   @default(false) @map("webhook_delivered")
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @default(now()) @updatedAt @map("updated_at")
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@unique([clientId, periodStart])
+  @@index([clientId])
+  @@map("tenant_billing_period")
 }
 
 // ============================================

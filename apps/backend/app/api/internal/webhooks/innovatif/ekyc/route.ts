@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { query, queryOne, withTransaction } from "@truestack/shared/db";
 import { decryptResponse, verifyWebhookSignature } from "@truestack/shared/innovatif";
+import { signOutboundWebhook } from "@truestack/shared/hmac-webhook";
 import { uploadKycDocument } from "@truestack/shared/s3";
 import crypto from "crypto";
 
@@ -571,6 +572,8 @@ async function triggerClientWebhook(sessionId: string) {
         eventType = "kyc.session.expired";
         break;
     }
+
+    const metadata = (session.metadata || {}) as Record<string, unknown>;
     
     const webhookPayload = {
       event: eventType,
@@ -581,17 +584,29 @@ async function triggerClientWebhook(sessionId: string) {
       reject_message: session.reject_message,
       document_name: session.document_name,
       document_number: session.document_number,
+      tenant_id: metadata.tenant_id ?? null,
+      borrower_id: metadata.borrower_id ?? null,
       metadata: session.metadata,
       timestamp: new Date().toISOString(),
     };
 
+    const rawBody = JSON.stringify(webhookPayload);
+    const outboundSecret =
+      process.env.TRUEIDENTITY_WEBHOOK_SECRET || process.env.KREDIT_WEBHOOK_SECRET || "";
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+      "X-TrueStack-Event": eventType,
+    };
+    if (outboundSecret) {
+      const { signature, timestamp } = signOutboundWebhook(rawBody, outboundSecret);
+      headers["x-trueidentity-signature"] = signature;
+      headers["x-trueidentity-timestamp"] = timestamp;
+    }
+
     const response = await fetch(webhookUrl, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-TrueStack-Event": eventType,
-      },
-      body: JSON.stringify(webhookPayload),
+      headers,
+      body: rawBody,
     });
 
     // Update delivery status

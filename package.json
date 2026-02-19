@@ -18,6 +18,7 @@
     "db:push": "pnpm --filter @truestack/shared db:push",
     "db:studio": "pnpm --filter @truestack/shared db:studio",
     "db:seed": "pnpm --filter @truestack/shared db:seed",
+    "db:reset": "pnpm --filter @truestack/shared db:reset",
     "docker:up": "docker compose up -d",
     "docker:down": "docker compose down",
     "docker:logs": "docker compose logs -f"

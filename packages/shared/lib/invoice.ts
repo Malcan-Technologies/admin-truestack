@@ -831,9 +831,11 @@ export async function generateAllMonthlyInvoices(): Promise<{
   failed: number;
   errors: Array<{ clientId: string; error: string }>;
 }> {
-  // Get all active clients
+  // Get all active API clients (exclude truestack_kredit - they are billed by Kredit)
   const clients = await query<{ id: string; name: string }>(`
-    SELECT id, name FROM client WHERE status = 'active'
+    SELECT id, name FROM client 
+    WHERE status = 'active' 
+      AND COALESCE(client_source, 'api') = 'api'
   `);
 
   // Calculate end date (last day of previous month in Malaysia timezone)
