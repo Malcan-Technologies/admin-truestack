@@ -33,6 +33,10 @@ COPY pnpm-workspace.yaml package.json ./
 COPY packages/shared/ ./packages/shared/
 COPY apps/backend/ ./apps/backend/
 
+# Generate Prisma client before building
+WORKDIR /app/packages/shared
+RUN pnpm db:generate
+
 # Build the application
 WORKDIR /app/apps/backend
 ENV NEXT_TELEMETRY_DISABLED=1

@@ -38,6 +38,10 @@ COPY pnpm-workspace.yaml package.json ./
 COPY packages/shared/ ./packages/shared/
 COPY apps/admin/ ./apps/admin/
 
+# Generate Prisma client before building
+WORKDIR /app/packages/shared
+RUN pnpm db:generate
+
 # Build the admin application
 WORKDIR /app/apps/admin
 ENV NEXT_TELEMETRY_DISABLED=1
