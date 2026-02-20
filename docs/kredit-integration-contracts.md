@@ -19,7 +19,7 @@ This document describes the webhook and API contracts between TrueStack Admin (T
 
 **Purpose:** Kredit triggers verification creation. Admin creates session, calls Innovatif, and returns `session_id` + `onboarding_url` in the same HTTP response (sync).
 
-**Prerequisite:** The tenant must already exist in Admin (created via `POST /api/webhooks/kredit/tenant-created`). Admin looks up the client by `tenant_id` (stored in `client.tenant_slug`). Use Kredit’s tenant ID as `tenant_id`; the short display code is only for UI in Admin.
+**Tenant lookup:** Admin looks up the client by `tenant_id` (stored in `client.tenant_slug`). Use Kredit’s tenant ID as `tenant_id`. If the tenant does not exist, Admin **auto-creates** it on first verification request (with default product config and pricing), so Kredit does not need to call `tenant-created` first. You can still call `tenant-created` to pre-create with name/contact/webhook_url.
 
 ### Headers
 

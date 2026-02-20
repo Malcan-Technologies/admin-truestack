@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { query, queryOne } from "@truestack/shared/db";
+import { query, queryOne, withTransaction } from "@truestack/shared/db";
 import { createInnovatifTransaction } from "@truestack/shared/innovatif";
 import { verifyKreditWebhookSignature } from "@truestack/shared/hmac-webhook";
 import crypto from "crypto";
@@ -116,24 +116,96 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const tenantClient = await queryOne<{
+    let tenantClient = await queryOne<{
       id: string;
       code: string;
       status: string;
     }>(
       `SELECT id, code, status FROM client 
        WHERE parent_client_id = $1 AND (tenant_slug = $2 OR code = $3) AND status = 'active'`,
-      [parentClient.id, tenant_id, `KREDIT_${tenant_id}`]
+      [parentClient.id, tenant_id, `KREDIT_${tenant_id.replace(/[^a-zA-Z0-9_-]/g, "_")}`]
     );
 
+    // Auto-create tenant on first verification request if not found
     if (!tenantClient) {
-      return NextResponse.json(
-        {
-          error: "NOT_FOUND",
-          message: `Tenant not found: ${tenant_id}. Ensure the tenant exists in Admin (e.g. via tenant-created webhook).`,
-        },
-        { status: 404 }
-      );
+      const codeBase = `KREDIT_${tenant_id.replace(/[^a-zA-Z0-9_-]/g, "_")}`;
+      let finalCode = codeBase;
+      let suffix = 0;
+      while (true) {
+        const exists = await queryOne<{ id: string }>(
+          "SELECT id FROM client WHERE code = $1",
+          [finalCode]
+        );
+        if (!exists) break;
+        finalCode = `${codeBase}_${++suffix}`;
+      }
+
+      const name = `Kredit Tenant ${tenant_id}`;
+      const inserted = await withTransaction(async (txClient) => {
+        const insertResult = await txClient.query(
+          `INSERT INTO client 
+            (name, code, client_type, client_source, parent_client_id, tenant_slug,
+             contact_email, contact_phone, company_registration, status)
+           VALUES ($1, $2, 'tenant', 'truestack_kredit', $3, $4, NULL, NULL, NULL, 'active')
+           ON CONFLICT (tenant_slug) DO NOTHING
+           RETURNING id, code, status`,
+          [name, finalCode, parentClient.id, tenant_id]
+        );
+        const row = insertResult.rows[0] as { id: string; code: string; status: string } | undefined;
+        if (!row) return null;
+
+        await txClient.query(
+          `INSERT INTO client_product_config (client_id, product_id, enabled, allow_overdraft, webhook_url)
+           VALUES ($1, 'true_identity', true, true, $2)
+           ON CONFLICT (client_id, product_id) DO UPDATE SET enabled = true, allow_overdraft = true`,
+          [row.id, webhook_url]
+        );
+        await txClient.query(
+          `INSERT INTO pricing_tier 
+            (client_id, product_id, tier_name, min_volume, max_volume, credits_per_session)
+           VALUES ($1, 'true_identity', 'Default', 1, NULL, 40)
+           ON CONFLICT (client_id, product_id, min_volume) DO NOTHING`,
+          [row.id]
+        );
+        return row;
+      });
+
+      if (inserted) {
+        tenantClient = inserted;
+        console.info("[Kredit Webhook] Auto-created tenant client:", tenant_id);
+      } else {
+        // Race: another request created the tenant; fetch and ensure config/tier exist
+        tenantClient = await queryOne<{ id: string; code: string; status: string }>(
+          `SELECT id, code, status FROM client 
+           WHERE parent_client_id = $1 AND tenant_slug = $2 AND status = 'active'`,
+          [parentClient.id, tenant_id]
+        );
+        if (tenantClient) {
+          await query(
+            `INSERT INTO client_product_config (client_id, product_id, enabled, allow_overdraft, webhook_url)
+             VALUES ($1, 'true_identity', true, true, $2)
+             ON CONFLICT (client_id, product_id) DO UPDATE SET enabled = true, allow_overdraft = true`,
+            [tenantClient.id, webhook_url]
+          );
+          await query(
+            `INSERT INTO pricing_tier 
+              (client_id, product_id, tier_name, min_volume, max_volume, credits_per_session)
+             VALUES ($1, 'true_identity', 'Default', 1, NULL, 40)
+             ON CONFLICT (client_id, product_id, min_volume) DO NOTHING`,
+            [tenantClient.id]
+          );
+        }
+      }
+
+      if (!tenantClient) {
+        return NextResponse.json(
+          {
+            error: "NOT_FOUND",
+            message: `Tenant not found: ${tenant_id}. Ensure the tenant exists in Admin (e.g. via tenant-created webhook).`,
+          },
+          { status: 404 }
+        );
+      }
     }
 
     // Get product config for credit check
