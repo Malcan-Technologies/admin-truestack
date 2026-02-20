@@ -244,6 +244,11 @@ resource "aws_ecs_task_definition" "backend" {
         { name = "INNOVATIF_MD5_KEY", valueFrom = "${var.secrets_arn}:innovatif_md5_key::" },
         { name = "INNOVATIF_CIPHERTEXT", valueFrom = "${var.secrets_arn}:innovatif_ciphertext::" },
         { name = "INTERNAL_API_KEY", valueFrom = "${var.secrets_arn}:internal_api_key::" },
+        # Kredit integration
+        { name = "KREDIT_WEBHOOK_SECRET", valueFrom = "${var.secrets_arn}:KREDIT_WEBHOOK_SECRET::" },
+        { name = "TRUEIDENTITY_WEBHOOK_SECRET", valueFrom = "${var.secrets_arn}:TRUEIDENTITY_WEBHOOK_SECRET::" },
+        { name = "KREDIT_BACKEND_URL", valueFrom = "${var.secrets_arn}:KREDIT_BACKEND_URL::" },
+        { name = "KREDIT_INTERNAL_SECRET", valueFrom = "${var.secrets_arn}:KREDIT_INTERNAL_SECRET::" },
       ]
 
       logConfiguration = {
