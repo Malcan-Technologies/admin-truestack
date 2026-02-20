@@ -88,11 +88,13 @@ export const auth = betterAuth({
   // Disable public signup - admin users are pre-created
   advanced: {
     disableCSRFCheck: false,
-    // Restrict cookies to admin subdomain (admin.truestack.my) - no leading dot
+    // Unique prefix so Admin cookies don't conflict with Kredit (kredit-auth.*) when both use .truestack.my
+    cookiePrefix: "admin-auth",
+    // Shared domain for admin + api subdomains; prefix avoids collision with Kredit cookies
     crossSubDomainCookies: isProduction
       ? {
           enabled: true,
-          domain: "admin.truestack.my",
+          domain: ".truestack.my",
         }
       : undefined,
   },

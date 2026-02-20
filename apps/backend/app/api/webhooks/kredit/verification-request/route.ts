@@ -151,11 +151,26 @@ export async function POST(request: NextRequest) {
     );
     const currentBalance = parseInt(balanceResult?.balance || "0", 10);
 
+    // Select tier by current billed volume: next session = billed_count + 1
+    const now = new Date();
+    const periodStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const periodEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+    const billedCountResult = await queryOne<{ count: string }>(
+      `SELECT COUNT(*)::text as count FROM kyc_session ks
+       JOIN credit_ledger cl ON cl.reference_id = ks.id AND cl.type = 'usage' AND cl.product_id = 'true_identity'
+       WHERE ks.client_id = $1 AND ks.billed = true 
+         AND ks.billed_at >= $2 AND ks.billed_at <= $3`,
+      [tenantClient.id, periodStart.toISOString(), periodEnd.toISOString()]
+    );
+    const billedCount = parseInt(billedCountResult?.count || "0", 10);
+    const nextSessionNum = billedCount + 1;
+
     const tierResult = await queryOne<{ credits_per_session: number }>(
       `SELECT credits_per_session FROM pricing_tier 
        WHERE client_id = $1 AND product_id = 'true_identity' 
+         AND min_volume <= $2 AND (max_volume IS NULL OR max_volume >= $2)
        ORDER BY min_volume DESC LIMIT 1`,
-      [tenantClient.id]
+      [tenantClient.id, nextSessionNum]
     );
     const minCredits = tierResult?.credits_per_session ?? 40; // RM 4 = 40 credits
 

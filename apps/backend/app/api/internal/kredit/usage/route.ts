@@ -6,8 +6,11 @@ const TRUESTACK_KREDIT_PARENT_CODE = "TRUESTACK_KREDIT";
 
 function verifyInternalAuth(request: NextRequest): boolean {
   const authHeader = request.headers.get("authorization");
-  const expectedKey = process.env.INTERNAL_API_KEY || process.env.KREDIT_INTERNAL_SECRET;
-  return !!expectedKey && authHeader === `Bearer ${expectedKey}`;
+  if (!authHeader?.startsWith("Bearer ")) return false;
+  const token = authHeader.slice(7);
+  const internalKey = process.env.INTERNAL_API_KEY;
+  const kreditSecret = process.env.KREDIT_INTERNAL_SECRET;
+  return (!!internalKey && token === internalKey) || (!!kreditSecret && token === kreditSecret);
 }
 
 // GET /api/internal/kredit/usage?tenant_id=&period_start=&period_end=
