@@ -2,10 +2,17 @@ import crypto from "crypto";
 
 const REPLAY_WINDOW_MS = 5 * 60 * 1000; // 5 minutes
 
+const HEX_SHA256_LENGTH = 64; // 32 bytes as hex
+
+function isHexString(s: string, length: number): boolean {
+  return s.length === length && /^[0-9a-fA-F]+$/.test(s);
+}
+
 /**
  * Verify HMAC-SHA256 signature for Kredit webhook requests.
- * Expected format: HMAC(secret, timestamp + "." + rawBody)
- * Headers: x-kredit-signature (base64), x-kredit-timestamp (unix ms)
+ * Accepts x-kredit-signature as either base64 (44 chars) or hex (64 chars).
+ * Payload: HMAC(secret, timestamp + "." + rawBody)
+ * Headers: x-kredit-signature, x-kredit-timestamp (unix ms)
  */
 export function verifyKreditWebhookSignature(
   rawBody: string,
@@ -31,19 +38,33 @@ export function verifyKreditWebhookSignature(
   }
 
   const payload = `${ts}.${rawBody}`;
-  const expected = crypto.createHmac("sha256", secret).update(payload).digest("base64");
+  const expectedRaw = crypto.createHmac("sha256", secret).update(payload).digest();
 
-  const sigBuf = Buffer.from(sig);
-  const expectedBuf = Buffer.from(expected);
-  if (sigBuf.length !== expectedBuf.length) {
-    return {
-      valid: false,
-      error: "Signature length mismatch (expected base64 HMAC-SHA256; check Kredit uses base64 not hex)",
-    };
+  let sigBuf: Buffer;
+  let expectedBuf: Buffer;
+  if (isHexString(sig, HEX_SHA256_LENGTH)) {
+    try {
+      sigBuf = Buffer.from(sig, "hex");
+    } catch {
+      return { valid: false, error: "Invalid hex signature" };
+    }
+    expectedBuf = expectedRaw;
+  } else {
+    // base64 (typically 44 chars)
+    const expectedBase64 = expectedRaw.toString("base64");
+    sigBuf = Buffer.from(sig);
+    expectedBuf = Buffer.from(expectedBase64);
+    if (sigBuf.length !== expectedBuf.length) {
+      return {
+        valid: false,
+        error: `Signature length ${sig.length} is not base64 (44) or hex (64). Use HMAC-SHA256 then encode as base64 or hex.`,
+      };
+    }
   }
 
   try {
-    const valid = crypto.timingSafeEqual(sigBuf, expectedBuf);
+    const valid =
+      sigBuf.length === expectedBuf.length && crypto.timingSafeEqual(sigBuf, expectedBuf);
     return valid ? { valid: true } : { valid: false, error: "Invalid signature" };
   } catch {
     return { valid: false, error: "Signature verification failed" };
