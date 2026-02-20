@@ -127,7 +127,7 @@ export function GenerateApiKeyModal({ clientId, trigger, onKeyGenerated }: Gener
           <div className="space-y-4">
             <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-4">
               <p className="mb-2 text-sm font-medium text-amber-400">
-                Save this key securely - it won't be shown again!
+                Save this key securely - it won&apos;t be shown again!
               </p>
               <div className="flex items-center gap-2">
                 <code className="flex-1 break-all rounded bg-slate-800 p-3 font-mono text-sm text-white">

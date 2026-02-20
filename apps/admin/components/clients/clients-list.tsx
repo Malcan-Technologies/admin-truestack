@@ -124,7 +124,7 @@ export function ClientsList({
         filterOptions={STATUS_FILTER_OPTIONS}
         filterPlaceholder="Filter by status"
         filter2Value={sourceFilter}
-        onFilter2Change={setSourceFilter}
+        onFilter2Change={(value) => setSourceFilter(value as "all" | "api" | "truestack_kredit")}
         filter2Options={SOURCE_FILTER_OPTIONS}
         filter2Placeholder="Filter by source"
         onRefresh={handleRefresh}
