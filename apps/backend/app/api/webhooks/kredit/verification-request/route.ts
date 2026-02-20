@@ -141,34 +141,38 @@ export async function POST(request: NextRequest) {
       }
 
       const name = `Kredit Tenant ${tenant_id}`;
-      const inserted = await withTransaction(async (txClient) => {
-        const insertResult = await txClient.query(
-          `INSERT INTO client 
-            (name, code, client_type, client_source, parent_client_id, tenant_slug,
-             contact_email, contact_phone, company_registration, status)
-           VALUES ($1, $2, 'tenant', 'truestack_kredit', $3, $4, NULL, NULL, NULL, 'active')
-           ON CONFLICT (tenant_slug) DO NOTHING
-           RETURNING id, code, status`,
-          [name, finalCode, parentClient.id, tenant_id]
-        );
-        const row = insertResult.rows[0] as { id: string; code: string; status: string } | undefined;
-        if (!row) return null;
+      let inserted: { id: string; code: string; status: string } | null = null;
 
-        await txClient.query(
-          `INSERT INTO client_product_config (client_id, product_id, enabled, allow_overdraft, webhook_url)
-           VALUES ($1, 'true_identity', true, true, $2)
-           ON CONFLICT (client_id, product_id) DO UPDATE SET enabled = true, allow_overdraft = true`,
-          [row.id, webhook_url]
-        );
-        await txClient.query(
-          `INSERT INTO pricing_tier 
-            (client_id, product_id, tier_name, min_volume, max_volume, credits_per_session)
-           VALUES ($1, 'true_identity', 'Default', 1, NULL, 40)
-           ON CONFLICT (client_id, product_id, min_volume) DO NOTHING`,
-          [row.id]
-        );
-        return row;
-      });
+      try {
+        inserted = await withTransaction(async (txClient) => {
+          const insertResult = await txClient.query(
+            `INSERT INTO client 
+              (name, code, client_type, client_source, parent_client_id, tenant_slug,
+               contact_email, contact_phone, company_registration, status)
+             VALUES ($1, $2, 'tenant', 'truestack_kredit', $3, $4, NULL, NULL, NULL, 'active')
+             RETURNING id, code, status`,
+            [name, finalCode, parentClient.id, tenant_id]
+          );
+          const row = insertResult.rows[0] as { id: string; code: string; status: string };
+
+          await txClient.query(
+            `INSERT INTO client_product_config (client_id, product_id, enabled, allow_overdraft, webhook_url)
+             VALUES ($1, 'true_identity', true, true, $2)`,
+            [row.id, webhook_url]
+          );
+          await txClient.query(
+            `INSERT INTO pricing_tier 
+              (client_id, product_id, tier_name, min_volume, max_volume, credits_per_session)
+             VALUES ($1, 'true_identity', 'Default', 1, NULL, 40)`,
+            [row.id]
+          );
+          return row;
+        });
+      } catch (err: unknown) {
+        const pgErr = err as { code?: string };
+        if (pgErr?.code !== "23505") throw err; // 23505 = unique_violation
+        // Race: another request created the tenant
+      }
 
       if (inserted) {
         tenantClient = inserted;
@@ -181,19 +185,25 @@ export async function POST(request: NextRequest) {
           [parentClient.id, tenant_id]
         );
         if (tenantClient) {
-          await query(
-            `INSERT INTO client_product_config (client_id, product_id, enabled, allow_overdraft, webhook_url)
-             VALUES ($1, 'true_identity', true, true, $2)
-             ON CONFLICT (client_id, product_id) DO UPDATE SET enabled = true, allow_overdraft = true`,
-            [tenantClient.id, webhook_url]
-          );
-          await query(
-            `INSERT INTO pricing_tier 
-              (client_id, product_id, tier_name, min_volume, max_volume, credits_per_session)
-             VALUES ($1, 'true_identity', 'Default', 1, NULL, 40)
-             ON CONFLICT (client_id, product_id, min_volume) DO NOTHING`,
-            [tenantClient.id]
-          );
+          try {
+            await query(
+              `INSERT INTO client_product_config (client_id, product_id, enabled, allow_overdraft, webhook_url)
+               VALUES ($1, 'true_identity', true, true, $2)`,
+              [tenantClient.id, webhook_url]
+            );
+          } catch (e: unknown) {
+            if ((e as { code?: string })?.code !== "23505") throw e;
+          }
+          try {
+            await query(
+              `INSERT INTO pricing_tier 
+                (client_id, product_id, tier_name, min_volume, max_volume, credits_per_session)
+               VALUES ($1, 'true_identity', 'Default', 1, NULL, 40)`,
+              [tenantClient.id]
+            );
+          } catch (e: unknown) {
+            if ((e as { code?: string })?.code !== "23505") throw e;
+          }
         }
       }
 
