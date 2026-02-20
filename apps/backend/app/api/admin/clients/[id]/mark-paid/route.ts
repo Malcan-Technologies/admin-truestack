@@ -57,7 +57,7 @@ export async function POST(
 
     const webhookBaseUrl =
       config?.webhook_url ||
-      process.env.KREDIT_WEBHOOK_BASE_URL ||
+      process.env.KREDIT_BACKEND_URL ||
       process.env.KREDIT_PAYMENT_WEBHOOK_URL;
 
     if (!webhookBaseUrl) {
@@ -65,7 +65,7 @@ export async function POST(
         {
           error: "CONFIG_ERROR",
           message:
-            "Webhook URL not configured. Set webhook_url in client config or KREDIT_WEBHOOK_BASE_URL.",
+            "Webhook URL not configured. Set webhook_url in client config or KREDIT_BACKEND_URL.",
         },
         { status: 500 }
       );

@@ -8,7 +8,7 @@ This document describes the webhook and API contracts between TrueStack Admin (T
 |----------|---------|
 | `KREDIT_WEBHOOK_SECRET` | Shared secret for verifying inbound Kredit → Admin webhooks |
 | `TRUEIDENTITY_WEBHOOK_SECRET` or `KREDIT_WEBHOOK_SECRET` | Shared secret for signing outbound Admin → Kredit webhooks |
-| `KREDIT_WEBHOOK_BASE_URL` | Base URL for Kredit payment webhook (optional; can use `webhook_url` in client config) |
+| `KREDIT_BACKEND_URL` | Base URL for Kredit payment webhook (optional; can use `webhook_url` in client config) |
 | `KREDIT_INTERNAL_SECRET` | Optional auth for usage API (falls back to `INTERNAL_API_KEY`) |
 
 ---
@@ -182,7 +182,7 @@ This document describes the webhook and API contracts between TrueStack Admin (T
 ### Webhook URL
 
 - From `webhook_url` in client product config, or
-- `{KREDIT_WEBHOOK_BASE_URL}/payment`
+- `{KREDIT_BACKEND_URL}/payment`
 
 ---
 
