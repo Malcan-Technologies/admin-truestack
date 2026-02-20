@@ -109,9 +109,10 @@ export async function POST(request: NextRequest) {
     }
 
     const name = tenant_name || `Kredit Tenant ${tenant_id}`;
-    const code = `KREDIT_${tenant_id.replace(/[^a-zA-Z0-9_-]/g, "_").toUpperCase().slice(0, 20)}`;
+    // code = KREDIT_<id> for unique lookup; full id so verification-request can match by code = KREDIT_${tenant_id}
+    const code = `KREDIT_${tenant_id.replace(/[^a-zA-Z0-9_-]/g, "_")}`;
 
-    // Ensure code is unique (truncate or append if collision)
+    // Ensure code is unique (append suffix only if collision)
     let finalCode = code;
     let suffix = 0;
     while (true) {

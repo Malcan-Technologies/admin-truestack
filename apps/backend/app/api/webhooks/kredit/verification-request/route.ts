@@ -128,7 +128,10 @@ export async function POST(request: NextRequest) {
 
     if (!tenantClient) {
       return NextResponse.json(
-        { error: "NOT_FOUND", message: `Tenant not found: ${tenant_id}` },
+        {
+          error: "NOT_FOUND",
+          message: `Tenant not found: ${tenant_id}. Ensure the tenant exists in Admin (e.g. via tenant-created webhook).`,
+        },
         { status: 404 }
       );
     }

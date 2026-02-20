@@ -19,6 +19,8 @@ This document describes the webhook and API contracts between TrueStack Admin (T
 
 **Purpose:** Kredit triggers verification creation. Admin creates session, calls Innovatif, and returns `session_id` + `onboarding_url` in the same HTTP response (sync).
 
+**Prerequisite:** The tenant must already exist in Admin (created via `POST /api/webhooks/kredit/tenant-created`). Admin looks up the client by `tenant_id` (stored in `client.tenant_slug`). Use Kredit’s tenant ID as `tenant_id`; the short display code is only for UI in Admin.
+
 ### Headers
 
 | Header | Required | Description |
@@ -59,7 +61,7 @@ This document describes the webhook and API contracts between TrueStack Admin (T
 
 | Field | Required | Description |
 |-------|----------|-------------|
-| `tenant_id` | Yes | Kredit tenant identifier (maps to child client) |
+| `tenant_id` | Yes | Kredit’s tenant identifier (ID). Admin stores it in `client.tenant_slug` and looks up by it. Use the same ID Kredit uses internally (e.g. `cmloqhf7e00002p3kpmsej2a7`). For display in Admin UI, use the client’s `name` or `code`. |
 | `borrower_id` | No | Borrower identifier in Kredit |
 | `document_name` | Yes | Full name on document |
 | `document_number` | Yes | Document number (IC/Passport) |
@@ -223,7 +225,7 @@ Same as Verification Request: `x-kredit-signature`, `x-kredit-timestamp`, `Conte
 
 | Field | Required | Description |
 |-------|----------|-------------|
-| `tenant_id` | Yes | Kredit tenant identifier (used as tenant_slug) |
+| `tenant_id` | Yes | Kredit’s tenant ID (e.g. `cmloqhf7e00002p3kpmsej2a7`). Stored as `client.tenant_slug`; same value is used in verification-request. |
 | `tenant_name` | No | Display name (default: "Kredit Tenant {tenant_id}") |
 | `contact_email` | No | Contact email |
 | `contact_phone` | No | Contact phone |
