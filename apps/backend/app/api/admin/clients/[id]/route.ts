@@ -26,6 +26,7 @@ export async function GET(
       notes: string | null;
       created_at: string;
       updated_at: string;
+      client_source: string | null;
     }>(
       `SELECT 
         c.id,
@@ -37,7 +38,8 @@ export async function GET(
         c.status,
         c.notes,
         c.created_at,
-        c.updated_at
+        c.updated_at,
+        COALESCE(c.client_source, 'api') as client_source
       FROM client c
       WHERE c.id = $1`,
       [id]

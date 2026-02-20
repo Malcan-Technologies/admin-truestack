@@ -41,11 +41,16 @@ export async function GET(request: NextRequest) {
       FROM kyc_session
     `);
 
-    // Get usage by client
+    // Get usage by client (include source and parent for Kredit breakdown)
     const clientUsage = await query<{
       client_id: string;
       client_name: string;
       client_code: string;
+      client_source: string | null;
+      client_type: string | null;
+      parent_client_id: string | null;
+      parent_client_name: string | null;
+      tenant_slug: string | null;
       total_sessions: string;
       approved_sessions: string;
       rejected_sessions: string;
@@ -58,6 +63,11 @@ export async function GET(request: NextRequest) {
         c.id as client_id,
         c.name as client_name,
         c.code as client_code,
+        COALESCE(c.client_source, 'api') as client_source,
+        COALESCE(c.client_type, 'direct') as client_type,
+        c.parent_client_id,
+        parent.name as parent_client_name,
+        c.tenant_slug,
         COUNT(ks.id) as total_sessions,
         COUNT(ks.id) FILTER (WHERE ks.status = 'completed' AND ks.result = 'approved') as approved_sessions,
         COUNT(ks.id) FILTER (WHERE ks.status = 'completed' AND ks.result = 'rejected') as rejected_sessions,
@@ -74,10 +84,11 @@ export async function GET(request: NextRequest) {
           ORDER BY created_at DESC LIMIT 1
         ), 0) as credit_balance
       FROM client c
+      LEFT JOIN client parent ON parent.id = c.parent_client_id
       LEFT JOIN kyc_session ks ON ks.client_id = c.id
-      GROUP BY c.id, c.name, c.code
+      GROUP BY c.id, c.name, c.code, c.client_source, c.client_type, c.parent_client_id, parent.name, c.tenant_slug
       HAVING COUNT(ks.id) > 0
-      ORDER BY COUNT(ks.id) DESC
+      ORDER BY COALESCE(c.client_source, 'api') DESC, parent.name NULLS LAST, c.name ASC, COUNT(ks.id) DESC
     `);
 
     // Calculate total credits balance
@@ -107,6 +118,11 @@ export async function GET(request: NextRequest) {
         clientId: cu.client_id,
         clientName: cu.client_name,
         clientCode: cu.client_code,
+        clientSource: cu.client_source ?? "api",
+        clientType: cu.client_type ?? "direct",
+        parentClientId: cu.parent_client_id,
+        parentClientName: cu.parent_client_name,
+        tenantSlug: cu.tenant_slug,
         totalSessions: parseInt(cu.total_sessions),
         approvedSessions: parseInt(cu.approved_sessions),
         rejectedSessions: parseInt(cu.rejected_sessions),

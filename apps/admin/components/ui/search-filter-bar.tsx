@@ -26,6 +26,10 @@ interface SearchFilterBarProps {
   onFilterChange?: (value: string) => void;
   filterOptions?: FilterOption[];
   filterPlaceholder?: string;
+  filter2Value?: string;
+  onFilter2Change?: (value: string) => void;
+  filter2Options?: FilterOption[];
+  filter2Placeholder?: string;
   onRefresh?: () => void;
   refreshing?: boolean;
   className?: string;
@@ -40,6 +44,10 @@ export function SearchFilterBar({
   onFilterChange,
   filterOptions,
   filterPlaceholder = "Filter",
+  filter2Value,
+  onFilter2Change,
+  filter2Options,
+  filter2Placeholder = "Filter",
   onRefresh,
   refreshing = false,
   className = "",
@@ -68,6 +76,25 @@ export function SearchFilterBar({
           </SelectTrigger>
           <SelectContent className="border-slate-700 bg-slate-800">
             {filterOptions.map((option) => (
+              <SelectItem
+                key={option.value}
+                value={option.value}
+                className="text-white hover:bg-slate-700 focus:bg-slate-700"
+              >
+                {option.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      )}
+
+      {filter2Options && onFilter2Change && (
+        <Select value={filter2Value} onValueChange={onFilter2Change}>
+          <SelectTrigger className="w-[180px] border-slate-700 bg-slate-800 text-white">
+            <SelectValue placeholder={filter2Placeholder} />
+          </SelectTrigger>
+          <SelectContent className="border-slate-700 bg-slate-800">
+            {filter2Options.map((option) => (
               <SelectItem
                 key={option.value}
                 value={option.value}

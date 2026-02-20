@@ -72,6 +72,82 @@ async function main() {
     console.log(`⏭️  Super admin already exists: ${existingAdmin.email}`);
   }
 
+  // Seed TrueStack Kredit parent client (for Kredit integration)
+  const kreditParent = await prisma.client.upsert({
+    where: { code: "TRUESTACK_KREDIT" },
+    update: {},
+    create: {
+      name: "TrueStack Kredit",
+      code: "TRUESTACK_KREDIT",
+      clientType: "parent",
+      clientSource: "truestack_kredit",
+      contactEmail: "kredit@truestack.my",
+      contactPhone: "-",
+      companyRegistration: "-",
+      status: "active",
+      notes: "Parent client for TrueStack Kredit tenants. Each Kredit tenant is a child client.",
+    },
+  });
+  console.log(`✅ TrueStack Kredit parent: ${kreditParent.code}`);
+
+  // Seed sample Kredit tenant (for staged rollout testing)
+  const demoTenant = await prisma.client.upsert({
+    where: { tenantSlug: "demo-company" },
+    update: {},
+    create: {
+      name: "Demo Company (Kredit Tenant)",
+      code: "KREDIT_DEMO_COMPANY",
+      clientType: "tenant",
+      clientSource: "truestack_kredit",
+      parentClientId: kreditParent.id,
+      tenantSlug: "demo-company",
+      contactEmail: "demo@example.com",
+      contactPhone: "-",
+      companyRegistration: "-",
+      status: "active",
+      notes: "Sample tenant for TrueStack Kredit integration testing",
+    },
+  }).catch(() => null);
+
+  if (demoTenant) {
+    // Ensure product config exists for the tenant
+    await prisma.clientProductConfig.upsert({
+      where: {
+        clientId_productId: {
+          clientId: demoTenant.id,
+          productId: "true_identity",
+        },
+      },
+      update: { enabled: true, allowOverdraft: true },
+      create: {
+        clientId: demoTenant.id,
+        productId: "true_identity",
+        enabled: true,
+        allowOverdraft: true,
+      },
+    });
+    // Add default pricing tier (RM 4 = 40 credits per verification)
+    const existingTier = await prisma.pricingTier.findFirst({
+      where: {
+        clientId: demoTenant.id,
+        productId: "true_identity",
+      },
+    });
+    if (!existingTier) {
+      await prisma.pricingTier.create({
+        data: {
+          clientId: demoTenant.id,
+          productId: "true_identity",
+          tierName: "Default",
+          minVolume: 1,
+          maxVolume: null,
+          creditsPerSession: 40,
+        },
+      });
+    }
+    console.log(`✅ Sample Kredit tenant: ${demoTenant.tenantSlug}`);
+  }
+
   console.log("\n🌱 Seed completed!");
   
   await prisma.$disconnect();

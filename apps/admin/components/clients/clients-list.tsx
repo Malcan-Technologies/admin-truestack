@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { PageHeader } from "@/components/layout/page-header";
@@ -24,6 +24,11 @@ type Client = {
   name: string;
   code: string;
   status: "active" | "suspended";
+  client_source?: string | null;
+  client_type?: string | null;
+  parent_client_id?: string | null;
+  parent_client_name?: string | null;
+  tenant_slug?: string | null;
   credit_balance: number;
   sessions_count: number;
   billed_total: number;
@@ -37,6 +42,7 @@ type Client = {
 
 interface ClientsListProps {
   clients: Client[];
+  initialSourceFilter?: "all" | "api" | "truestack_kredit";
 }
 
 const STATUS_FILTER_OPTIONS: FilterOption[] = [
@@ -45,17 +51,37 @@ const STATUS_FILTER_OPTIONS: FilterOption[] = [
   { value: "suspended", label: "Suspended" },
 ];
 
-export function ClientsList({ clients: initialClients }: ClientsListProps) {
+const SOURCE_FILTER_OPTIONS: FilterOption[] = [
+  { value: "all", label: "All Sources" },
+  { value: "api", label: "API" },
+  { value: "truestack_kredit", label: "TrueStack Kredit" },
+];
+
+export function ClientsList({
+  clients: initialClients,
+  initialSourceFilter = "all",
+}: ClientsListProps) {
   const router = useRouter();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [sourceFilter, setSourceFilter] = useState(initialSourceFilter);
   const [refreshing, setRefreshing] = useState(false);
 
-  // Filter clients based on search and status
+  useEffect(() => {
+    setSourceFilter(initialSourceFilter);
+  }, [initialSourceFilter]);
+
+  // Filter clients based on search, status, and source
   const filteredClients = useMemo(() => {
     return initialClients.filter((client) => {
       // Status filter
       if (statusFilter !== "all" && client.status !== statusFilter) {
+        return false;
+      }
+
+      // Source filter
+      const source = client.client_source ?? "api";
+      if (sourceFilter !== "all" && source !== sourceFilter) {
         return false;
       }
 
@@ -70,7 +96,7 @@ export function ClientsList({ clients: initialClients }: ClientsListProps) {
 
       return true;
     });
-  }, [initialClients, search, statusFilter]);
+  }, [initialClients, search, statusFilter, sourceFilter]);
 
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -97,6 +123,10 @@ export function ClientsList({ clients: initialClients }: ClientsListProps) {
         onFilterChange={setStatusFilter}
         filterOptions={STATUS_FILTER_OPTIONS}
         filterPlaceholder="Filter by status"
+        filter2Value={sourceFilter}
+        onFilter2Change={setSourceFilter}
+        filter2Options={SOURCE_FILTER_OPTIONS}
+        filter2Placeholder="Filter by source"
         onRefresh={handleRefresh}
         refreshing={refreshing}
         className="mb-6"
@@ -133,6 +163,8 @@ export function ClientsList({ clients: initialClients }: ClientsListProps) {
               <TableRow className="border-slate-800 bg-slate-900 hover:bg-slate-900">
                 <TableHead className="text-slate-400">Name</TableHead>
                 <TableHead className="text-slate-400">Code</TableHead>
+                <TableHead className="text-slate-400">Source</TableHead>
+                <TableHead className="text-slate-400">Type</TableHead>
                 <TableHead className="text-slate-400">Status</TableHead>
                 <TableHead className="text-slate-400">Credits (10 = RM1)</TableHead>
                 <TableHead className="text-slate-400">Unpaid</TableHead>
@@ -160,6 +192,35 @@ export function ClientsList({ clients: initialClients }: ClientsListProps) {
                     <code className="rounded bg-slate-800 px-1.5 py-0.5 font-mono text-sm text-slate-300">
                       {client.code}
                     </code>
+                  </TableCell>
+                  <TableCell>
+                    <Badge
+                      variant="outline"
+                      className={
+                        (client.client_source ?? "api") === "truestack_kredit"
+                          ? "border-violet-500/30 bg-violet-500/10 text-violet-400"
+                          : "border-slate-500/30 bg-slate-500/10 text-slate-400"
+                      }
+                    >
+                      {(client.client_source ?? "api") === "truestack_kredit"
+                        ? "TrueStack Kredit"
+                        : "API"}
+                    </Badge>
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex flex-col gap-0.5">
+                      <Badge
+                        variant="outline"
+                        className="w-fit border-slate-500/30 bg-slate-500/10 text-slate-400"
+                      >
+                        {client.client_type ?? "direct"}
+                      </Badge>
+                      {client.parent_client_id && client.parent_client_name && (
+                        <span className="text-xs text-slate-500">
+                          ← {client.parent_client_name}
+                        </span>
+                      )}
+                    </div>
                   </TableCell>
                   <TableCell>
                     <Badge

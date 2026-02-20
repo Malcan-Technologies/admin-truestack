@@ -45,6 +45,11 @@ type ClientUsage = {
   clientId: string;
   clientName: string;
   clientCode: string;
+  clientSource?: string;
+  clientType?: string;
+  parentClientId?: string | null;
+  parentClientName?: string | null;
+  tenantSlug?: string | null;
   totalSessions: number;
   approvedSessions: number;
   rejectedSessions: number;
@@ -201,7 +206,7 @@ export default function UsagePage() {
         </Card>
       </div>
 
-      {/* Usage by Client */}
+      {/* Usage by Client - with parent->tenant breakdown for Kredit */}
       <Card className="border-slate-800 bg-slate-900/50">
         <CardHeader>
           <CardTitle className="text-white flex items-center gap-2">
@@ -209,7 +214,7 @@ export default function UsagePage() {
             Usage by Client
           </CardTitle>
           <CardDescription className="text-slate-400">
-            Breakdown of KYC sessions and billing by client
+            Breakdown of KYC sessions and billing by client. TrueStack Kredit tenants are grouped under their parent.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -226,6 +231,7 @@ export default function UsagePage() {
               <TableHeader>
                 <TableRow className="border-slate-800 hover:bg-transparent">
                   <TableHead className="text-slate-400">Client</TableHead>
+                  <TableHead className="text-slate-400">Source</TableHead>
                   <TableHead className="text-slate-400">Total Sessions</TableHead>
                   <TableHead className="text-slate-400">Approved</TableHead>
                   <TableHead className="text-slate-400">Rejected</TableHead>
@@ -239,19 +245,43 @@ export default function UsagePage() {
                 {clientUsage.map((client) => (
                   <TableRow
                     key={client.clientId}
-                    className="border-slate-800 transition-colors hover:bg-indigo-500/5"
+                    className={`border-slate-800 transition-colors hover:bg-indigo-500/5 ${
+                      client.clientSource === "truestack_kredit" && client.parentClientId
+                        ? "bg-slate-800/20"
+                        : ""
+                    }`}
                   >
                     <TableCell>
-                      <Link
-                        href={`/clients/${client.clientId}`}
-                        className="font-medium text-white hover:text-indigo-400"
-                      >
-                        {client.clientName}
-                      </Link>
-                      <p className="text-xs text-slate-500 font-mono">
-                        {client.clientCode}
-                      </p>
+                      <div className={client.parentClientId ? "pl-4 border-l-2 border-violet-500/30" : ""}>
+                        <Link
+                          href={`/clients/${client.clientId}`}
+                          className="font-medium text-white hover:text-indigo-400"
+                        >
+                          {client.clientName}
+                        </Link>
+                        <p className="text-xs text-slate-500 font-mono">
+                          {client.clientCode}
+                        </p>
+                        {client.parentClientName && (
+                          <p className="text-xs text-violet-400 mt-0.5">
+                            ← {client.parentClientName}
+                          </p>
+                        )}
+                      </div>
                     </TableCell>
+                    <TableCell>
+                      <Badge
+                        variant="outline"
+                        className={
+                          client.clientSource === "truestack_kredit"
+                            ? "border-violet-500/30 bg-violet-500/10 text-violet-400"
+                            : "border-slate-500/30 bg-slate-500/10 text-slate-400"
+                        }
+                      >
+                        {client.clientSource === "truestack_kredit" ? "Kredit" : "API"}
+                      </Badge>
+                    </TableCell>
+
                     <TableCell className="text-slate-300 font-medium">
                       {client.totalSessions.toLocaleString()}
                     </TableCell>
