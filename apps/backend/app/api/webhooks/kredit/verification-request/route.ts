@@ -36,7 +36,12 @@ export async function POST(request: NextRequest) {
     );
 
     if (!verification.valid) {
-      console.warn("[Kredit Webhook] Signature verification failed:", verification.error);
+      // Safe debug: no secrets or signature values, only lengths for comparing with Kredit
+      console.warn("[Kredit Webhook] Signature verification failed:", verification.error, {
+        bodyLength: rawBody.length,
+        timestamp: timestamp ?? "(missing)",
+        signatureLength: signature?.length ?? 0,
+      });
       return NextResponse.json(
         { error: "UNAUTHORIZED", message: verification.error || "Invalid signature" },
         { status: 401 }

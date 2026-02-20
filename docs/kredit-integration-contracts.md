@@ -31,8 +31,17 @@ This document describes the webhook and API contracts between TrueStack Admin (T
 
 - Payload: `{timestamp}.{rawBody}` (timestamp + `.` + raw request body)
 - Algorithm: HMAC-SHA256
-- Encoding: Base64
+- Encoding: **Base64** (not hex)
 - Replay window: 5 minutes (timestamp must be within ±5 min of server time)
+
+**Kredit must sign the exact raw body** (the same UTF-8 string sent in the HTTP body). Do not re-serialize JSON (key order or whitespace changes will break verification).
+
+**Troubleshooting 401 "Signature verification failed":**
+
+1. **Same secret** – Admin and Kredit must use the same `KREDIT_WEBHOOK_SECRET` value.
+2. **Timestamp** – Must be Unix **milliseconds** (e.g. `Date.now()` in JS), not seconds.
+3. **Signature encoding** – Must be Base64. If Kredit uses hex, Admin will return "Signature length mismatch".
+4. **Raw body** – Build the JSON body once, use that exact string for both the request body and the HMAC payload `timestamp + "." + rawBody`.
 
 ### Request Body
 
