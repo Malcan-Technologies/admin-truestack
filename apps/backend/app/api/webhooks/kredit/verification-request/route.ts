@@ -7,6 +7,22 @@ import crypto from "crypto";
 const KREDIT_WEBHOOK_SECRET = process.env.KREDIT_WEBHOOK_SECRET || "";
 const TRUESTACK_KREDIT_PARENT_CODE = "TRUESTACK_KREDIT";
 
+const LOCALHOST_PATTERN = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?(\/|$)/i;
+
+/** For truestack_kredit: when webhook_url is localhost, use KREDIT_BACKEND_URL + path instead */
+function resolveKreditWebhookUrl(webhookUrl: string): string {
+  if (!LOCALHOST_PATTERN.test(webhookUrl)) return webhookUrl;
+  const kreditBackend = process.env.KREDIT_BACKEND_URL?.trim();
+  if (!kreditBackend) return webhookUrl;
+  try {
+    const parsed = new URL(webhookUrl);
+    const path = parsed.pathname + parsed.search;
+    return `${kreditBackend.replace(/\/$/, "")}${path || "/api/webhooks/trueidentity"}`;
+  } catch {
+    return webhookUrl;
+  }
+}
+
 function generateRefId(prefix: string): string {
   const timestamp = Date.now().toString(36);
   const random = crypto.randomBytes(4).toString("hex");
@@ -103,12 +119,19 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // For truestack_kredit: Admin uses KREDIT_BACKEND_URL when Kredit sends localhost
+    const resolvedWebhookUrl = resolveKreditWebhookUrl(webhook_url);
+
     if (
       process.env.NODE_ENV === "production" &&
-      (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?(\/|$)/i.test(webhook_url))
+      LOCALHOST_PATTERN.test(resolvedWebhookUrl)
     ) {
       return NextResponse.json(
-        { error: "BAD_REQUEST", message: "webhook_url cannot be localhost in production" },
+        {
+          error: "BAD_REQUEST",
+          message:
+            "webhook_url cannot be localhost in production. Set KREDIT_BACKEND_URL in Admin or use a production URL in Kredit.",
+        },
         { status: 400 }
       );
     }
@@ -172,7 +195,7 @@ export async function POST(request: NextRequest) {
           await txClient.query(
             `INSERT INTO client_product_config (client_id, product_id, enabled, allow_overdraft, webhook_url)
              VALUES ($1, 'true_identity', true, true, $2)`,
-            [row.id, webhook_url]
+            [row.id, resolvedWebhookUrl]
           );
           await txClient.query(
             `INSERT INTO pricing_tier 
@@ -203,7 +226,7 @@ export async function POST(request: NextRequest) {
             await query(
               `INSERT INTO client_product_config (client_id, product_id, enabled, allow_overdraft, webhook_url)
                VALUES ($1, 'true_identity', true, true, $2)`,
-              [tenantClient.id, webhook_url]
+              [tenantClient.id, resolvedWebhookUrl]
             );
           } catch (e: unknown) {
             if ((e as { code?: string })?.code !== "23505") throw e;
@@ -310,7 +333,7 @@ export async function POST(request: NextRequest) {
         document_name,
         document_number.replace(/-/g, ""),
         document_type,
-        webhook_url,
+        resolvedWebhookUrl,
         JSON.stringify(sessionMetadata),
       ]
     );

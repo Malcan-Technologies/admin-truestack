@@ -5,6 +5,22 @@ import { verifyKreditWebhookSignature } from "@truestack/shared/hmac-webhook";
 const KREDIT_WEBHOOK_SECRET = process.env.KREDIT_WEBHOOK_SECRET || "";
 const TRUESTACK_KREDIT_PARENT_CODE = "TRUESTACK_KREDIT";
 
+const LOCALHOST_PATTERN = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?(\/|$)/i;
+
+/** When webhook_url is localhost, use KREDIT_BACKEND_URL + path */
+function resolveKreditWebhookUrl(webhookUrl: string): string {
+  if (!LOCALHOST_PATTERN.test(webhookUrl)) return webhookUrl;
+  const kreditBackend = process.env.KREDIT_BACKEND_URL?.trim();
+  if (!kreditBackend) return webhookUrl;
+  try {
+    const parsed = new URL(webhookUrl);
+    const path = parsed.pathname + parsed.search;
+    return `${kreditBackend.replace(/\/$/, "")}${path || "/api/webhooks/trueidentity"}`;
+  } catch {
+    return webhookUrl;
+  }
+}
+
 // POST /api/webhooks/kredit/tenant-created
 // Called by Kredit when a tenant pays for the first time (Core + TrueIdentity).
 // Auto-creates the tenant client in Admin with idempotency.
@@ -76,13 +92,20 @@ export async function POST(request: NextRequest) {
     }
     const slug = tenant_slug ?? tenant_id;
 
+    // For truestack_kredit: Admin uses KREDIT_BACKEND_URL when Kredit sends localhost
+    const resolvedWebhookUrl = webhook_url ? resolveKreditWebhookUrl(webhook_url) : null;
+
     if (
-      webhook_url &&
+      resolvedWebhookUrl &&
       process.env.NODE_ENV === "production" &&
-      /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?(\/|$)/i.test(webhook_url)
+      LOCALHOST_PATTERN.test(resolvedWebhookUrl)
     ) {
       return NextResponse.json(
-        { error: "BAD_REQUEST", message: "webhook_url cannot be localhost in production" },
+        {
+          error: "BAD_REQUEST",
+          message:
+            "webhook_url cannot be localhost in production. Set KREDIT_BACKEND_URL in Admin or use a production URL in Kredit.",
+        },
         { status: 400 }
       );
     }
@@ -165,7 +188,7 @@ export async function POST(request: NextRequest) {
       await txClient.query(
         `INSERT INTO client_product_config (client_id, product_id, enabled, allow_overdraft, webhook_url)
          VALUES ($1, 'true_identity', true, true, $2)`,
-        [row.id, webhook_url || null]
+        [row.id, resolvedWebhookUrl || null]
       );
 
       await txClient.query(

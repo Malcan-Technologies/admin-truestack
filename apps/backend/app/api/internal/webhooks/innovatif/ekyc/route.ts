@@ -516,9 +516,25 @@ export async function POST(request: NextRequest) {
   }
 }
 
+const LOCALHOST_PATTERN = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?(\/|$)/i;
+
+/** For truestack_kredit: when webhook_url is localhost, use KREDIT_BACKEND_URL + path */
+function resolveKreditWebhookUrl(webhookUrl: string): string {
+  if (!LOCALHOST_PATTERN.test(webhookUrl)) return webhookUrl;
+  const kreditBackend = process.env.KREDIT_BACKEND_URL?.trim();
+  if (!kreditBackend) return webhookUrl;
+  try {
+    const parsed = new URL(webhookUrl);
+    const path = parsed.pathname + parsed.search;
+    return `${kreditBackend.replace(/\/$/, "")}${path || "/api/webhooks/trueidentity"}`;
+  } catch {
+    return webhookUrl;
+  }
+}
+
 // Trigger webhook to client (fire and forget for now)
 async function triggerClientWebhook(sessionId: string) {
-  // Get session and client config
+  // Get session, webhook_url, and client_source for Kredit fallback
   const session = await queryOne<{
     id: string;
     client_id: string;
@@ -530,25 +546,32 @@ async function triggerClientWebhook(sessionId: string) {
     document_number: string;
     metadata: Record<string, unknown>;
     webhook_url: string | null;
+    client_source: string | null;
   }>(
     `SELECT 
       ks.id, ks.client_id, ks.ref_id, ks.status, ks.result, 
-      ks.reject_message, ks.document_name, ks.document_number, ks.metadata, ks.webhook_url
+      ks.reject_message, ks.document_name, ks.document_number, ks.metadata, ks.webhook_url,
+      COALESCE(c.client_source, 'api') as client_source
      FROM kyc_session ks
+     JOIN client c ON c.id = ks.client_id
      WHERE ks.id = $1`,
     [sessionId]
   );
 
   if (!session) return;
 
-  // webhook_url is required per session - no fallback needed
-  const webhookUrl = session.webhook_url;
-  
+  let webhookUrl = session.webhook_url;
+
   if (!webhookUrl) {
     // This shouldn't happen as webhook_url is now required,
     // but handle gracefully for any legacy sessions
     console.warn(`Session ${sessionId} has no webhook_url configured`);
     return;
+  }
+
+  // For truestack_kredit: Admin uses KREDIT_BACKEND_URL when session has localhost
+  if (session.client_source === "truestack_kredit") {
+    webhookUrl = resolveKreditWebhookUrl(webhookUrl);
   }
 
   try {
