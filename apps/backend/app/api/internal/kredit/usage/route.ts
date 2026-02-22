@@ -47,8 +47,8 @@ export async function GET(request: NextRequest) {
 
     const tenantClient = await queryOne<{ id: string }>(
       `SELECT id FROM client 
-       WHERE parent_client_id = $1 AND (tenant_slug = $2 OR code = $3) AND status = 'active'`,
-      [parentClient.id, tenantId, `KREDIT_${tenantId}`]
+       WHERE parent_client_id = $1 AND (kredit_tenant_id = $2 OR tenant_slug = $2) AND status = 'active'`,
+      [parentClient.id, tenantId]
     );
 
     if (!tenantClient) {

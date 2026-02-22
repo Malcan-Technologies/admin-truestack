@@ -28,10 +28,11 @@ export async function POST(
     const client = await queryOne<{
       id: string;
       client_source: string | null;
+      kredit_tenant_id: string | null;
       tenant_slug: string | null;
       code: string;
     }>(
-      `SELECT id, COALESCE(client_source, 'api') as client_source, tenant_slug, code 
+      `SELECT id, COALESCE(client_source, 'api') as client_source, kredit_tenant_id, tenant_slug, code 
        FROM client WHERE id = $1`,
       [clientId]
     );
@@ -47,7 +48,8 @@ export async function POST(
       );
     }
 
-    const tenantId = client.tenant_slug || client.code.replace(/^KREDIT_/, "");
+    const tenantId =
+      client.kredit_tenant_id ?? client.tenant_slug ?? client.code.replace(/^(KREDIT_|TK_)/, "");
 
     const config = await queryOne<{ webhook_url: string | null }>(
       `SELECT webhook_url FROM client_product_config 

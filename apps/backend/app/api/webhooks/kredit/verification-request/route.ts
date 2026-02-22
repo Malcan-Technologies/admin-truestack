@@ -50,6 +50,7 @@ export async function POST(request: NextRequest) {
 
     let body: {
       tenant_id: string;
+      tenant_slug?: string;
       borrower_id: string;
       document_name: string;
       document_number: string;
@@ -70,6 +71,7 @@ export async function POST(request: NextRequest) {
 
     const {
       tenant_id,
+      tenant_slug,
       borrower_id,
       document_name,
       document_number,
@@ -101,7 +103,19 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Resolve tenant_id to child client under TrueStack Kredit parent
+    if (
+      process.env.NODE_ENV === "production" &&
+      (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?(\/|$)/i.test(webhook_url))
+    ) {
+      return NextResponse.json(
+        { error: "BAD_REQUEST", message: "webhook_url cannot be localhost in production" },
+        { status: 400 }
+      );
+    }
+
+    const slug = tenant_slug ?? tenant_id;
+
+    // Resolve tenant by kredit_tenant_id (backend lookup key)
     const parentClient = await queryOne<{ id: string }>(
       `SELECT id FROM client 
        WHERE code = $1 AND client_type = 'parent' AND client_source = 'truestack_kredit' AND status = 'active'`,
@@ -122,13 +136,13 @@ export async function POST(request: NextRequest) {
       status: string;
     }>(
       `SELECT id, code, status FROM client 
-       WHERE parent_client_id = $1 AND (tenant_slug = $2 OR code = $3) AND status = 'active'`,
-      [parentClient.id, tenant_id, `KREDIT_${tenant_id.replace(/[^a-zA-Z0-9_-]/g, "_")}`]
+       WHERE parent_client_id = $1 AND (kredit_tenant_id = $2 OR tenant_slug = $3) AND status = 'active'`,
+      [parentClient.id, tenant_id, slug]
     );
 
     // Auto-create tenant on first verification request if not found
     if (!tenantClient) {
-      const codeBase = `KREDIT_${tenant_id.replace(/[^a-zA-Z0-9_-]/g, "_")}`;
+      const codeBase = `TK_${slug.replace(/[^a-zA-Z0-9_-]/g, "_").toUpperCase()}`;
       let finalCode = codeBase;
       let suffix = 0;
       while (true) {
@@ -140,18 +154,18 @@ export async function POST(request: NextRequest) {
         finalCode = `${codeBase}_${++suffix}`;
       }
 
-      const name = `Kredit Tenant ${tenant_id}`;
+      const name = `Kredit Tenant ${slug}`;
       let inserted: { id: string; code: string; status: string } | null = null;
 
       try {
         inserted = await withTransaction(async (txClient) => {
           const insertResult = await txClient.query(
             `INSERT INTO client 
-              (name, code, client_type, client_source, parent_client_id, tenant_slug,
+              (name, code, client_type, client_source, parent_client_id, tenant_slug, kredit_tenant_id,
                contact_email, contact_phone, company_registration, status)
-             VALUES ($1, $2, 'tenant', 'truestack_kredit', $3, $4, NULL, NULL, NULL, 'active')
+             VALUES ($1, $2, 'tenant', 'truestack_kredit', $3, $4, $5, NULL, NULL, NULL, 'active')
              RETURNING id, code, status`,
-            [name, finalCode, parentClient.id, tenant_id]
+            [name, finalCode, parentClient.id, slug, tenant_id]
           );
           const row = insertResult.rows[0] as { id: string; code: string; status: string };
 
@@ -181,8 +195,8 @@ export async function POST(request: NextRequest) {
         // Race: another request created the tenant; fetch and ensure config/tier exist
         tenantClient = await queryOne<{ id: string; code: string; status: string }>(
           `SELECT id, code, status FROM client 
-           WHERE parent_client_id = $1 AND tenant_slug = $2 AND status = 'active'`,
-          [parentClient.id, tenant_id]
+           WHERE parent_client_id = $1 AND (kredit_tenant_id = $2 OR tenant_slug = $3) AND status = 'active'`,
+          [parentClient.id, tenant_id, slug]
         );
         if (tenantClient) {
           try {

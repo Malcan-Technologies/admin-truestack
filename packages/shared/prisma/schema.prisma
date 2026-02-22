@@ -125,7 +125,8 @@ model Client {
   clientType          String   @default("direct") @map("client_type") // parent, tenant, direct
   clientSource        String   @default("api") @map("client_source") // api, truestack_kredit
   parentClientId      String?  @map("parent_client_id") @db.Uuid
-  tenantSlug          String?  @unique @map("tenant_slug") // Kredit tenant identifier for lookup
+  tenantSlug          String?  @unique @map("tenant_slug") // Kredit tenant slug (display)
+  kreditTenantId      String?  @unique @map("kredit_tenant_id") // Kredit tenant id (backend lookup, not displayed)
   contactEmail        String?  @map("contact_email")
   contactPhone        String?  @map("contact_phone")
   companyRegistration String?  @map("company_registration") // SSM number

@@ -19,7 +19,7 @@ This document describes the webhook and API contracts between TrueStack Admin (T
 
 **Purpose:** Kredit triggers verification creation. Admin creates session, calls Innovatif, and returns `session_id` + `onboarding_url` in the same HTTP response (sync).
 
-**Tenant lookup:** Admin looks up the client by `tenant_id` (stored in `client.tenant_slug`). Use Kredit’s tenant ID as `tenant_id`. If the tenant does not exist, Admin **auto-creates** it on first verification request (with default product config and pricing), so Kredit does not need to call `tenant-created` first. You can still call `tenant-created` to pre-create with name/contact/webhook_url.
+**Tenant lookup:** Admin looks up the client by `tenant_id` (stored in `client.kredit_tenant_id`) or `tenant_slug` (fallback). Use Kredit’s tenant **id** (cuid) as `tenant_id`. If the tenant does not exist, Admin **auto-creates** it on first verification request (with default product config and pricing), so Kredit does not need to call `tenant-created` first. You can still call `tenant-created` to pre-create with name/contact/webhook_url.
 
 ### Headers
 
@@ -50,6 +50,8 @@ This document describes the webhook and API contracts between TrueStack Admin (T
 ```json
 {
   "tenant_id": "string",
+  "tenant_slug": "string",
+  "tenant_name": "string",
   "borrower_id": "string",
   "document_name": "string",
   "document_number": "string",
@@ -61,12 +63,14 @@ This document describes the webhook and API contracts between TrueStack Admin (T
 
 | Field | Required | Description |
 |-------|----------|-------------|
-| `tenant_id` | Yes | Kredit’s tenant identifier (ID). Admin stores it in `client.tenant_slug` and looks up by it. Use the same ID Kredit uses internally (e.g. `cmloqhf7e00002p3kpmsej2a7`). For display in Admin UI, use the client’s `name` or `code`. |
+| `tenant_id` | Yes | Kredit’s tenant **id** (cuid). Admin stores it in `client.kredit_tenant_id` and looks up by it. Use the same ID Kredit uses internally (e.g. `cmloqhf7e00002p3kpmsej2a7`). |
+| `tenant_slug` | No | Kredit’s tenant slug (e.g. `demo-company`). Used for display and fallback lookup. |
+| `tenant_name` | No | Display name for the tenant. Used when auto-creating. |
 | `borrower_id` | No | Borrower identifier in Kredit |
 | `document_name` | Yes | Full name on document |
 | `document_number` | Yes | Document number (IC/Passport) |
 | `document_type` | No | Default `"1"` (IC) |
-| `webhook_url` | Yes | URL for status callbacks |
+| `webhook_url` | Yes | URL for status callbacks. **Production:** Must not point to localhost (e.g. `localhost:4000`). |
 | `metadata` | No | Additional context |
 
 ### Response (200 OK)
@@ -140,7 +144,7 @@ This document describes the webhook and API contracts between TrueStack Admin (T
 
 | Param | Required | Description |
 |-------|----------|-------------|
-| `tenant_id` | Yes | Kredit tenant identifier |
+| `tenant_id` | Yes | Kredit tenant **id** (cuid). Admin looks up by `kredit_tenant_id` or `tenant_slug`. |
 | `period_start` | Yes | ISO date or timestamp |
 | `period_end` | Yes | ISO date or timestamp |
 
@@ -214,6 +218,7 @@ Same as Verification Request: `x-kredit-signature`, `x-kredit-timestamp`, `Conte
 ```json
 {
   "tenant_id": "string",
+  "tenant_slug": "string",
   "tenant_name": "string",
   "contact_email": "string",
   "contact_phone": "string",
@@ -225,12 +230,13 @@ Same as Verification Request: `x-kredit-signature`, `x-kredit-timestamp`, `Conte
 
 | Field | Required | Description |
 |-------|----------|-------------|
-| `tenant_id` | Yes | Kredit’s tenant ID (e.g. `cmloqhf7e00002p3kpmsej2a7`). Stored as `client.tenant_slug`; same value is used in verification-request. |
+| `tenant_id` | Yes | Kredit’s tenant **id** (cuid). Stored in `client.kredit_tenant_id`. Same value is used in verification-request. |
+| `tenant_slug` | No | Kredit’s tenant slug (e.g. `demo-company`). Stored in `client.tenant_slug` for display. |
 | `tenant_name` | No | Display name (default: "Kredit Tenant {tenant_id}") |
 | `contact_email` | No | Contact email |
 | `contact_phone` | No | Contact phone |
 | `company_registration` | No | SSM number |
-| `webhook_url` | No | Default webhook URL for status callbacks |
+| `webhook_url` | No | Default webhook URL for status callbacks. **Production:** Must not point to localhost. |
 | `metadata` | No | Additional context |
 
 ### Response (200 OK)
@@ -241,7 +247,7 @@ Same as Verification Request: `x-kredit-signature`, `x-kredit-timestamp`, `Conte
   "created": true,
   "client_id": "uuid",
   "tenant_id": "string",
-  "code": "KREDIT_xxx",
+  "code": "TK_DEMO_COMPANY",
   "name": "string",
   "message": "Tenant client created"
 }
@@ -258,6 +264,32 @@ Same as Verification Request: `x-kredit-signature`, `x-kredit-timestamp`, `Conte
 ```
 
 ---
+
+
+
+---
+
+## Restart TrueIdentity Session
+
+**Purpose:** Allow users to retry KYC by expiring the old session and creating a new one.
+
+**Behavior:**
+1. Expire the old session (mark as expired)
+2. Call Admin verification endpoint to create a new session
+3. Use the new `session_id` and `onboarding_url` for the user
+
+
+
+---
+
+## Restart TrueIdentity Session
+
+**Purpose:** Allow users to retry KYC by expiring the old session and creating a new one.
+
+**Behavior:**
+1. Expire the old session (mark as expired)
+2. Call Admin verification endpoint to create a new session
+3. Use the new `session_id` and `onboarding_url` for the user
 
 ## Idempotency and Replay Protection
 

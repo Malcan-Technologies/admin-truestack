@@ -39,6 +39,7 @@ export async function POST(request: NextRequest) {
 
     let body: {
       tenant_id: string;
+      tenant_slug?: string;
       tenant_name?: string;
       contact_email?: string;
       contact_phone?: string;
@@ -58,6 +59,7 @@ export async function POST(request: NextRequest) {
 
     const {
       tenant_id,
+      tenant_slug,
       tenant_name,
       contact_email,
       contact_phone,
@@ -69,6 +71,18 @@ export async function POST(request: NextRequest) {
     if (!tenant_id) {
       return NextResponse.json(
         { error: "BAD_REQUEST", message: "tenant_id is required" },
+        { status: 400 }
+      );
+    }
+    const slug = tenant_slug ?? tenant_id;
+
+    if (
+      webhook_url &&
+      process.env.NODE_ENV === "production" &&
+      /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?(\/|$)/i.test(webhook_url)
+    ) {
+      return NextResponse.json(
+        { error: "BAD_REQUEST", message: "webhook_url cannot be localhost in production" },
         { status: 400 }
       );
     }
@@ -87,7 +101,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Idempotency: check if tenant already exists
+    // Idempotency: check if tenant already exists (by kredit_tenant_id or tenant_slug)
     const existingTenant = await queryOne<{
       id: string;
       name: string;
@@ -95,8 +109,8 @@ export async function POST(request: NextRequest) {
       tenant_slug: string | null;
     }>(
       `SELECT id, name, code, tenant_slug FROM client 
-       WHERE parent_client_id = $1 AND (tenant_slug = $2 OR code = $3) AND status != 'deleted'`,
-      [parentClient.id, tenant_id, `KREDIT_${tenant_id}`]
+       WHERE parent_client_id = $1 AND (kredit_tenant_id = $2 OR tenant_slug = $3) AND status != 'deleted'`,
+      [parentClient.id, tenant_id, slug]
     );
 
     if (existingTenant) {
@@ -108,12 +122,10 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    const name = tenant_name || `Kredit Tenant ${tenant_id}`;
-    // code = KREDIT_<id> for unique lookup; full id so verification-request can match by code = KREDIT_${tenant_id}
-    const code = `KREDIT_${tenant_id.replace(/[^a-zA-Z0-9_-]/g, "_")}`;
+    const name = tenant_name || `Kredit Tenant ${slug}`;
+    const codeBase = `TK_${slug.replace(/[^a-zA-Z0-9_-]/g, "_").toUpperCase()}`;
 
-    // Ensure code is unique (append suffix only if collision)
-    let finalCode = code;
+    let finalCode = codeBase;
     let suffix = 0;
     while (true) {
       const exists = await queryOne<{ id: string }>(
@@ -121,20 +133,21 @@ export async function POST(request: NextRequest) {
         [finalCode]
       );
       if (!exists) break;
-      finalCode = `${code}_${++suffix}`;
+      finalCode = `${codeBase}_${++suffix}`;
     }
 
     const newClient = await withTransaction(async (txClient) => {
       const insertResult = await txClient.query(
         `INSERT INTO client 
-          (name, code, client_type, client_source, parent_client_id, tenant_slug,
+          (name, code, client_type, client_source, parent_client_id, tenant_slug, kredit_tenant_id,
            contact_email, contact_phone, company_registration, status)
-         VALUES ($1, $2, 'tenant', 'truestack_kredit', $3, $4, $5, $6, $7, 'active')
+         VALUES ($1, $2, 'tenant', 'truestack_kredit', $3, $4, $5, $6, $7, $8, 'active')
          RETURNING id, name, code, tenant_slug`,
         [
           name,
           finalCode,
           parentClient.id,
+          slug,
           tenant_id,
           contact_email || null,
           contact_phone || null,
