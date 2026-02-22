@@ -2,9 +2,9 @@ import Link from "next/link";
 import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { ArrowLeft, Settings } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import { ClientDetailTabs } from "@/components/clients/client-detail-tabs";
+import { EditClientButton } from "@/components/clients/edit-client-button";
 import { formatDate } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
@@ -99,13 +99,7 @@ export default async function ClientDetailPage({
             Created {formatDate(client.created_at)}
           </p>
         </div>
-        <Button
-          variant="outline"
-          className="border-slate-700 bg-transparent text-slate-300 hover:bg-slate-800 hover:text-white"
-        >
-          <Settings className="mr-2 h-4 w-4" />
-          Edit Client
-        </Button>
+        <EditClientButton client={client} />
       </div>
 
       <ClientDetailTabs client={client} />
