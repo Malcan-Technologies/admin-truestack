@@ -282,15 +282,6 @@ Same as Verification Request: `x-kredit-signature`, `x-kredit-timestamp`, `Conte
 
 ---
 
-## Restart TrueIdentity Session
-
-**Purpose:** Allow users to retry KYC by expiring the old session and creating a new one.
-
-**Behavior:**
-1. Expire the old session (mark as expired)
-2. Call Admin verification endpoint to create a new session
-3. Use the new `session_id` and `onboarding_url` for the user
-
 ## Idempotency and Replay Protection
 
 - **Inbound (Kredit → Admin):** 5-minute replay window via `x-kredit-timestamp`. Requests with timestamps outside this window are rejected.
