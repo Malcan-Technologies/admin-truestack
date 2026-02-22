@@ -70,7 +70,7 @@ This document describes the webhook and API contracts between TrueStack Admin (T
 | `document_name` | Yes | Full name on document |
 | `document_number` | Yes | Document number (IC/Passport) |
 | `document_type` | No | Default `"1"` (IC) |
-| `webhook_url` | Yes | URL for status callbacks. **Production:** Must not point to localhost (e.g. `localhost:4000`). |
+| `webhook_url` | Yes | URL for status callbacks. Can be a full URL or path-only (e.g. `/api/webhooks/trueidentity`). Path-only requires Admin's `KREDIT_BACKEND_URL`. **Production:** Must not resolve to localhost. |
 | `metadata` | No | Additional context |
 
 ### Response (200 OK)

@@ -23,8 +23,11 @@ import {
   DollarSign,
   AlertCircle,
   ExternalLink,
+  Pencil,
+  Loader2,
 } from "lucide-react";
 import { apiClient, formatDateTime } from "@/lib/utils";
+import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 
 type KycSessionDetail = {
@@ -106,6 +109,9 @@ export function KycSessionDetailModal({
   const [refreshing, setRefreshing] = useState(false);
   const [session, setSession] = useState<KycSessionDetail | null>(null);
   const [activeTab, setActiveTab] = useState("overview");
+  const [editingWebhookUrl, setEditingWebhookUrl] = useState(false);
+  const [webhookUrlEdit, setWebhookUrlEdit] = useState("");
+  const [savingWebhookUrl, setSavingWebhookUrl] = useState(false);
 
   const fetchSession = async () => {
     if (!sessionId) return;
@@ -121,6 +127,34 @@ export function KycSessionDetailModal({
     } finally {
       setLoading(false);
     }
+  };
+
+  const saveWebhookUrl = async () => {
+    if (!sessionId || !clientId || !webhookUrlEdit.trim()) return;
+    setSavingWebhookUrl(true);
+    try {
+      await apiClient(`/api/admin/clients/${clientId}/kyc-sessions/${sessionId}`, {
+        method: "PATCH",
+        body: JSON.stringify({ webhook_url: webhookUrlEdit.trim() }),
+      });
+      toast.success("Webhook URL updated");
+      setEditingWebhookUrl(false);
+      await fetchSession();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to update webhook URL");
+    } finally {
+      setSavingWebhookUrl(false);
+    }
+  };
+
+  const startEditWebhookUrl = () => {
+    setWebhookUrlEdit(session?.webhook_url || "");
+    setEditingWebhookUrl(true);
+  };
+
+  const cancelEditWebhookUrl = () => {
+    setEditingWebhookUrl(false);
+    setWebhookUrlEdit("");
   };
 
   const refreshFromProvider = async () => {
@@ -155,6 +189,8 @@ export function KycSessionDetailModal({
     if (open && sessionId) {
       setSession(null);
       setActiveTab("overview");
+      setEditingWebhookUrl(false);
+      setWebhookUrlEdit("");
       fetchSession();
     }
   }, [open, sessionId, clientId]);
@@ -719,14 +755,59 @@ export function KycSessionDetailModal({
                     <span className="text-slate-400">Sent</span>
                     <span className="text-white">{session.webhook_attempts}</span>
                   </div>
-                  {session.webhook_url && (
-                    <div className="flex justify-between">
-                      <span className="text-slate-400">URL</span>
-                      <span className="text-white text-xs font-mono truncate max-w-[300px]">
-                        {session.webhook_url}
-                      </span>
+                  <div className="space-y-2">
+                    <div className="flex justify-between items-start gap-2">
+                      <span className="text-slate-400 shrink-0">URL</span>
+                      {editingWebhookUrl ? (
+                        <div className="flex-1 min-w-0 space-y-2">
+                          <Input
+                            value={webhookUrlEdit}
+                            onChange={(e) => setWebhookUrlEdit(e.target.value)}
+                            placeholder="https://..."
+                            className="text-xs font-mono border-slate-700 bg-slate-800 text-white"
+                          />
+                          <div className="flex gap-2">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={cancelEditWebhookUrl}
+                              disabled={savingWebhookUrl}
+                              className="border-slate-700 text-slate-300"
+                            >
+                              Cancel
+                            </Button>
+                            <Button
+                              size="sm"
+                              onClick={saveWebhookUrl}
+                              disabled={savingWebhookUrl || !webhookUrlEdit.trim()}
+                              className="bg-indigo-600 hover:bg-indigo-700"
+                            >
+                              {savingWebhookUrl ? (
+                                <Loader2 className="h-3 w-3 animate-spin" />
+                              ) : (
+                                "Save"
+                              )}
+                            </Button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="text-white text-xs font-mono truncate max-w-[280px]">
+                            {session.webhook_url || "—"}
+                          </span>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={startEditWebhookUrl}
+                            className="shrink-0 h-7 w-7 p-0 text-slate-400 hover:text-white"
+                            title="Edit webhook URL"
+                          >
+                            <Pencil className="h-3 w-3" />
+                          </Button>
+                        </div>
+                      )}
                     </div>
-                  )}
+                  </div>
                   {session.webhook_last_error && (
                     <div className="mt-2 p-2 rounded bg-red-500/10 border border-red-500/20">
                       <span className="text-red-400 text-xs">

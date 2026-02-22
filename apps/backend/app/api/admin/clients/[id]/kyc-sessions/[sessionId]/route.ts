@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { queryOne } from "@truestack/shared/db";
+import { queryOne, execute } from "@truestack/shared/db";
 import { auth } from "@/lib/auth";
 import { getPresignedUrls } from "@truestack/shared/s3";
 
@@ -221,6 +221,65 @@ export async function GET(
     });
   } catch (error) {
     console.error("Error fetching KYC session:", error);
+    return NextResponse.json(
+      { error: "SERVER_ERROR", message: "Internal server error" },
+      { status: 500 }
+    );
+  }
+}
+
+// PATCH /api/admin/clients/:id/kyc-sessions/:sessionId - Update session webhook_url
+export async function PATCH(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string; sessionId: string }> }
+) {
+  try {
+    const session = await auth.api.getSession({ headers: request.headers });
+    if (!session?.user) {
+      return NextResponse.json(
+        { error: "UNAUTHORIZED", message: "Not authenticated" },
+        { status: 401 }
+      );
+    }
+
+    const { id: clientId, sessionId } = await params;
+    const body = await request.json();
+    const { webhook_url } = body;
+
+    if (typeof webhook_url !== "string" || !webhook_url.trim()) {
+      return NextResponse.json(
+        { error: "BAD_REQUEST", message: "webhook_url is required and must be a non-empty string" },
+        { status: 400 }
+      );
+    }
+
+    // Validate URL format
+    try {
+      new URL(webhook_url.trim());
+    } catch {
+      return NextResponse.json(
+        { error: "BAD_REQUEST", message: "webhook_url must be a valid HTTP/HTTPS URL" },
+        { status: 400 }
+      );
+    }
+
+    const result = await execute(
+      `UPDATE kyc_session 
+       SET webhook_url = $1, webhook_delivered = false, webhook_last_error = NULL
+       WHERE id = $2 AND client_id = $3`,
+      [webhook_url.trim(), sessionId, clientId]
+    );
+
+    if (result === 0) {
+      return NextResponse.json(
+        { error: "NOT_FOUND", message: "Session not found or does not belong to this client" },
+        { status: 404 }
+      );
+    }
+
+    return NextResponse.json({ success: true, webhook_url: webhook_url.trim() });
+  } catch (error) {
+    console.error("Error updating KYC session webhook:", error);
     return NextResponse.json(
       { error: "SERVER_ERROR", message: "Internal server error" },
       { status: 500 }

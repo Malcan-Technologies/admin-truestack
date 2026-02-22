@@ -110,17 +110,34 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    try {
-      new URL(webhook_url);
-    } catch {
-      return NextResponse.json(
-        { error: "BAD_REQUEST", message: "webhook_url must be a valid HTTP/HTTPS URL" },
-        { status: 400 }
-      );
-    }
+    let resolvedWebhookUrl: string;
 
-    // For truestack_kredit: Admin uses KREDIT_BACKEND_URL when Kredit sends localhost
-    const resolvedWebhookUrl = resolveKreditWebhookUrl(webhook_url);
+    // Path-only (e.g. "/api/webhooks/trueidentity"): Admin prepends KREDIT_BACKEND_URL
+    if (webhook_url.startsWith("/")) {
+      const kreditBackend = process.env.KREDIT_BACKEND_URL?.trim();
+      if (!kreditBackend) {
+        return NextResponse.json(
+          {
+            error: "BAD_REQUEST",
+            message:
+              "Path-only webhook_url requires KREDIT_BACKEND_URL in Admin. Send a full URL or set KREDIT_BACKEND_URL.",
+          },
+          { status: 400 }
+        );
+      }
+      resolvedWebhookUrl = `${kreditBackend.replace(/\/$/, "")}${webhook_url}`;
+    } else {
+      try {
+        new URL(webhook_url);
+      } catch {
+        return NextResponse.json(
+          { error: "BAD_REQUEST", message: "webhook_url must be a valid HTTP/HTTPS URL" },
+          { status: 400 }
+        );
+      }
+      // For truestack_kredit: Admin uses KREDIT_BACKEND_URL when Kredit sends localhost
+      resolvedWebhookUrl = resolveKreditWebhookUrl(webhook_url);
+    }
 
     if (
       process.env.NODE_ENV === "production" &&
