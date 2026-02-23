@@ -119,14 +119,33 @@ This document describes the webhook and API contracts between TrueStack Admin (T
 {
   "event": "kyc.session.completed",
   "session_id": "uuid",
+  "ref_id": "string",
   "tenant_id": "string",
   "borrower_id": "string",
   "status": "completed",
   "result": "approved",
   "reject_message": null,
-  "timestamp": "2025-02-18T12:00:00.000Z"
+  "document_name": "string",
+  "document_number": "string",
+  "metadata": {},
+  "timestamp": "2025-02-18T12:00:00.000Z",
+  "document_images": {
+    "DIRECTOR_IC_FRONT": { "url": "https://..." },
+    "DIRECTOR_IC_BACK": { "url": "https://..." },
+    "DIRECTOR_PASSPORT": { "url": "https://..." },
+    "SELFIE_LIVENESS": { "url": "https://..." }
+  }
 }
 ```
+
+**document_images** (optional, only on `kyc.session.completed`): Presigned URLs for KYC document images. Keys match Borrower Document categories. Only present when images exist. URLs expire in 24 hours.
+
+| Key | Description |
+|-----|-------------|
+| `DIRECTOR_IC_FRONT` | IC front image (document_type 1) |
+| `DIRECTOR_IC_BACK` | IC back image (document_type 1) |
+| `DIRECTOR_PASSPORT` | Passport front image (document_type 2) |
+| `SELFIE_LIVENESS` | Selfie / liveness image (best_frame or face_image) |
 
 ---
 
