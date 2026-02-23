@@ -14,7 +14,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { CheckCircle2, RefreshCw, XCircle } from "lucide-react";
+import { CheckCircle2, RefreshCw, Send, XCircle } from "lucide-react";
 import { apiClient, formatDateTime } from "@/lib/utils";
 import { toast } from "sonner";
 
@@ -154,6 +154,32 @@ export default function KreditPaymentsPage() {
     }
   };
 
+  const resendWebhook = async (id: string) => {
+    setProcessingId(id);
+    try {
+      const result = await apiClient<{
+        success: boolean;
+        webhook?: { delivered: boolean; error?: string | null };
+      }>(`/api/admin/truestack-kredit/subscription-payments/${id}/resend-webhook`, {
+        method: "POST",
+        body: JSON.stringify({}),
+      });
+      if (result.webhook?.delivered) {
+        toast.success("Webhook delivered successfully");
+      } else {
+        toast.error(result.webhook?.error ?? "Webhook delivery failed");
+      }
+      await fetchPayments();
+    } catch (error) {
+      console.error("Resend webhook failed:", error);
+      const msg =
+        error instanceof Error ? error.message : "Failed to resend webhook";
+      toast.error(msg);
+    } finally {
+      setProcessingId(null);
+    }
+  };
+
   return (
     <div>
       <PageHeader
@@ -267,7 +293,7 @@ export default function KreditPaymentsPage() {
                         )}
                       </TableCell>
                       <TableCell>
-                        <div className="flex items-center gap-2">
+                        <div className="flex flex-wrap items-center gap-2">
                           <Button
                             size="sm"
                             onClick={() => approve(item.id)}
@@ -287,6 +313,20 @@ export default function KreditPaymentsPage() {
                             <XCircle className="mr-1 h-4 w-4" />
                             Reject
                           </Button>
+                          {!item.decisionWebhookDelivered &&
+                            (item.status === "approved" || item.status === "rejected") && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => resendWebhook(item.id)}
+                                disabled={processingId === item.id}
+                                className="border-amber-500/40 text-amber-400 hover:bg-amber-500/10 hover:text-amber-300"
+                                title={item.decisionWebhookLastError ?? "Resend decision webhook to Kredit"}
+                              >
+                                <Send className="mr-1 h-4 w-4" />
+                                Resend webhook
+                              </Button>
+                            )}
                         </div>
                       </TableCell>
                     </TableRow>
