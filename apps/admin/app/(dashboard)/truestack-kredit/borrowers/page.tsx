@@ -14,9 +14,11 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { RefreshCw, Users } from "lucide-react";
+import { AlertTriangle, Fingerprint, RefreshCw, Users } from "lucide-react";
 import { apiClient, formatDate } from "@/lib/utils";
 import { toast } from "sonner";
+
+type BorrowerPerformanceRiskLevel = "NO_HISTORY" | "GOOD" | "WATCH" | "HIGH_RISK" | "DEFAULTED";
 
 type BorrowersResponse = {
   borrowers: Array<{
@@ -26,14 +28,23 @@ type BorrowersResponse = {
     icNumber: string;
     email: string | null;
     phone: string | null;
+    documentVerified: boolean;
     tenant: {
       id: string;
       name: string;
       slug: string;
     };
     loanCount: number;
-    applicationCount: number;
     createdAt: string;
+    performanceProjection: {
+      riskLevel: BorrowerPerformanceRiskLevel;
+      onTimeRate: string | null;
+      tags: string[];
+      defaultedLoans: number;
+      inArrearsLoans: number;
+      readyForDefaultLoans: number;
+      totalLoans: number;
+    } | null;
   }>;
   pagination: {
     total: number;
@@ -44,6 +55,21 @@ type BorrowersResponse = {
 };
 
 const DEFAULT_PAGE_SIZE = 20;
+
+function getPerformanceBadgeMeta(riskLevel: BorrowerPerformanceRiskLevel | undefined) {
+  switch (riskLevel) {
+    case "DEFAULTED":
+      return { label: "Defaulted", className: "border-red-500/30 bg-red-500/10 text-red-400" };
+    case "HIGH_RISK":
+      return { label: "High Risk", className: "border-amber-500/30 bg-amber-500/10 text-amber-400" };
+    case "WATCH":
+      return { label: "Watch", className: "border-blue-500/30 bg-blue-500/10 text-blue-400" };
+    case "GOOD":
+      return { label: "Good", className: "border-green-500/30 bg-green-500/10 text-green-400" };
+    default:
+      return { label: "No History", className: "border-slate-500/30 bg-slate-700/40 text-slate-400" };
+  }
+}
 
 export default function KreditBorrowersPage() {
   const [loading, setLoading] = useState(true);
@@ -141,8 +167,10 @@ export default function KreditBorrowersPage() {
                     <TableHead className="text-slate-400">Tenant</TableHead>
                     <TableHead className="text-slate-400">Type</TableHead>
                     <TableHead className="text-slate-400">IC/Doc</TableHead>
+                    <TableHead className="text-slate-400">Phone</TableHead>
+                    <TableHead className="text-slate-400">KYC</TableHead>
+                    <TableHead className="text-slate-400">Performance</TableHead>
                     <TableHead className="text-slate-400">Loans</TableHead>
-                    <TableHead className="text-slate-400">Applications</TableHead>
                     <TableHead className="text-slate-400">Created</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -163,8 +191,53 @@ export default function KreditBorrowersPage() {
                         </Badge>
                       </TableCell>
                       <TableCell className="text-slate-300">{borrower.icNumber}</TableCell>
+                      <TableCell className="text-slate-300">{borrower.phone || "-"}</TableCell>
+                      <TableCell>
+                        {borrower.documentVerified ? (
+                          <Badge
+                            className="border-green-500/30 bg-green-500/10 text-green-400"
+                            title="Verified via TrueIdentity e-KYC"
+                          >
+                            <Fingerprint className="mr-1 h-3 w-3" />
+                            e-KYC
+                          </Badge>
+                        ) : (
+                          <Badge
+                            className="border-amber-500/30 bg-amber-500/10 text-amber-400"
+                            title="Manually verified by admin"
+                          >
+                            <AlertTriangle className="mr-1 h-3 w-3" />
+                            Manual
+                          </Badge>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {(() => {
+                          const projection = borrower.performanceProjection;
+                          const meta = getPerformanceBadgeMeta(projection?.riskLevel);
+                          const onTimeRate = projection?.onTimeRate ? Number(projection.onTimeRate) : null;
+                          const riskNotes = [
+                            projection?.defaultedLoans ? `${projection.defaultedLoans} defaulted` : null,
+                            projection?.inArrearsLoans ? `${projection.inArrearsLoans} in arrears` : null,
+                            projection?.readyForDefaultLoans ? `${projection.readyForDefaultLoans} default ready` : null,
+                          ].filter(Boolean) as string[];
+
+                          return (
+                            <div className="space-y-1">
+                              <Badge className={meta.className}>{meta.label}</Badge>
+                              <p className="text-xs text-slate-500">
+                                {onTimeRate !== null ? `On-time ${onTimeRate.toFixed(1)}%` : "No repayment track record"}
+                              </p>
+                              {riskNotes.length > 0 && (
+                                <p className="text-xs text-slate-500">
+                                  {riskNotes.join(" • ")}
+                                </p>
+                              )}
+                            </div>
+                          );
+                        })()}
+                      </TableCell>
                       <TableCell className="text-slate-300">{borrower.loanCount.toLocaleString()}</TableCell>
-                      <TableCell className="text-slate-300">{borrower.applicationCount.toLocaleString()}</TableCell>
                       <TableCell className="text-slate-400">{formatDate(borrower.createdAt)}</TableCell>
                     </TableRow>
                   ))}

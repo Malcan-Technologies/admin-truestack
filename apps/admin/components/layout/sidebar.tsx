@@ -17,6 +17,7 @@ import {
   ShieldCheck,
   Building2,
   Banknote,
+  Gift,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { signOut } from "@/lib/auth-client";
@@ -59,6 +60,7 @@ const navSections: NavSection[] = [
       { title: "Borrowers", href: "/truestack-kredit/borrowers", icon: Users },
       { title: "Loans", href: "/truestack-kredit/loans", icon: Banknote },
       { title: "Payment Approvals", href: "/truestack-kredit/payments", icon: CreditCard },
+      { title: "Referrals", href: "/truestack-kredit/referrals", icon: Gift },
     ],
   },
   {

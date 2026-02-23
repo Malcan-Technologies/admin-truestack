@@ -220,7 +220,7 @@ export default function KreditPaymentsPage() {
                     : "border-slate-700 bg-transparent text-slate-300 hover:bg-slate-800 hover:text-white"
                 }
               >
-                {status}
+                {status.charAt(0).toUpperCase() + status.slice(1)}
               </Button>
             ))}
             <div className="ml-auto w-80">
@@ -294,25 +294,29 @@ export default function KreditPaymentsPage() {
                       </TableCell>
                       <TableCell>
                         <div className="flex flex-wrap items-center gap-2">
-                          <Button
-                            size="sm"
-                            onClick={() => approve(item.id)}
-                            disabled={item.status !== "pending" || processingId === item.id}
-                            className="bg-green-600 text-white hover:bg-green-700"
-                          >
-                            <CheckCircle2 className="mr-1 h-4 w-4" />
-                            Approve
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => reject(item.id)}
-                            disabled={item.status !== "pending" || processingId === item.id}
-                            className="border-red-500/40 text-red-400 hover:bg-red-500/10 hover:text-red-300"
-                          >
-                            <XCircle className="mr-1 h-4 w-4" />
-                            Reject
-                          </Button>
+                          {item.status === "pending" && (
+                            <>
+                              <Button
+                                size="sm"
+                                onClick={() => approve(item.id)}
+                                disabled={processingId === item.id}
+                                className="bg-green-600 text-white hover:bg-green-700"
+                              >
+                                <CheckCircle2 className="mr-1 h-4 w-4" />
+                                Approve
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => reject(item.id)}
+                                disabled={processingId === item.id}
+                                className="border-red-500/40 text-red-400 hover:bg-red-500/10 hover:text-red-300"
+                              >
+                                <XCircle className="mr-1 h-4 w-4" />
+                                Reject
+                              </Button>
+                            </>
+                          )}
                           {!item.decisionWebhookDelivered &&
                             (item.status === "approved" || item.status === "rejected") && (
                               <Button

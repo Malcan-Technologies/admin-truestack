@@ -25,14 +25,11 @@ type LoansResponse = {
     tenant: { id: string; name: string; slug: string };
     borrowerId: string;
     borrower: { id: string; name: string; icNumber: string; email: string | null };
-    productId: string;
-    product: { id: string; name: string };
     principalAmount: number;
     interestRate: number;
     term: number;
     status: string;
     disbursementDate: string | null;
-    disbursementReference: string | null;
     createdAt: string;
   }>;
   pagination: {
@@ -134,7 +131,7 @@ export default function KreditLoansPage() {
               Loans
             </CardTitle>
             <CardDescription className="text-slate-400">
-              Search by borrower, tenant, product, or disbursement reference.
+              Search by borrower or tenant.
             </CardDescription>
           </div>
           <div className="w-80">
@@ -161,13 +158,11 @@ export default function KreditLoansPage() {
                     <TableRow className="border-slate-800 hover:bg-transparent">
                       <TableHead className="text-slate-400">Borrower</TableHead>
                       <TableHead className="text-slate-400">Tenant</TableHead>
-                      <TableHead className="text-slate-400">Product</TableHead>
                       <TableHead className="text-slate-400">Principal</TableHead>
                       <TableHead className="text-slate-400">Rate</TableHead>
                       <TableHead className="text-slate-400">Term</TableHead>
                       <TableHead className="text-slate-400">Status</TableHead>
                       <TableHead className="text-slate-400">Disbursed</TableHead>
-                      <TableHead className="text-slate-400">Reference</TableHead>
                       <TableHead className="text-slate-400">Created</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -185,7 +180,6 @@ export default function KreditLoansPage() {
                           <p className="text-slate-200">{loan.tenant.name}</p>
                           <p className="text-xs text-slate-500">{loan.tenant.slug}</p>
                         </TableCell>
-                        <TableCell className="text-slate-300">{loan.product.name}</TableCell>
                         <TableCell className="text-slate-300 font-medium">
                           {formatRM(loan.principalAmount)}
                         </TableCell>
@@ -200,9 +194,6 @@ export default function KreditLoansPage() {
                           {loan.disbursementDate
                             ? formatDate(loan.disbursementDate)
                             : "-"}
-                        </TableCell>
-                        <TableCell className="text-slate-400 text-sm">
-                          {loan.disbursementReference || "-"}
                         </TableCell>
                         <TableCell className="text-slate-400">{formatDate(loan.createdAt)}</TableCell>
                       </TableRow>
