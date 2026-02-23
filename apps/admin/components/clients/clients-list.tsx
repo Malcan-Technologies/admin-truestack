@@ -54,7 +54,7 @@ const STATUS_FILTER_OPTIONS: FilterOption[] = [
 const SOURCE_FILTER_OPTIONS: FilterOption[] = [
   { value: "all", label: "All Sources" },
   { value: "api", label: "API" },
-  { value: "truestack_kredit", label: "TrueStack Kredit" },
+  { value: "truestack_kredit", label: "TrueKredit" },
 ];
 
 export function ClientsList({
@@ -203,7 +203,7 @@ export function ClientsList({
                       }
                     >
                       {(client.client_source ?? "api") === "truestack_kredit"
-                        ? "TrueStack Kredit"
+                        ? "TrueKredit"
                         : "API"}
                     </Badge>
                   </TableCell>

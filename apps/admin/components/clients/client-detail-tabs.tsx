@@ -992,7 +992,7 @@ export function ClientDetailTabs({ client }: ClientDetailTabsProps) {
             <Card className="border-slate-800 bg-slate-900/50">
               <CardHeader className="flex flex-row items-center justify-between">
                 <div>
-                  <CardTitle className="text-white">TrueStack Kredit Billing</CardTitle>
+                  <CardTitle className="text-white">TrueKredit Billing</CardTitle>
                   <CardDescription className="text-slate-400">
                     Mark billing periods as paid. A signed webhook will be sent to Kredit.
                   </CardDescription>

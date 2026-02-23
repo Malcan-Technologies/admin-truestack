@@ -16,6 +16,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Loader2, Check, Lock, RefreshCw, Pencil, X, Save } from "lucide-react";
 import { apiClient } from "@/lib/utils";
+import { APP_VERSION } from "@/lib/version";
 
 // Helper to format role for display
 function formatRole(role: string): string {
@@ -396,7 +397,7 @@ export default function SettingsPage() {
             </div>
             <div>
               <p className="text-sm text-slate-400">Version</p>
-              <p className="text-white">1.0.0</p>
+              <p className="text-white">{APP_VERSION}</p>
             </div>
           </CardContent>
         </Card>

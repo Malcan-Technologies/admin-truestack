@@ -7,6 +7,7 @@ import {
   Bar,
   LineChart,
   Line,
+  ComposedChart,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -208,6 +209,100 @@ export function LineChartComponent({
             />
           ))}
         </LineChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
+/** Monthly growth chart with two Y axes: tenants (left) and loan volume (right) */
+export function MonthlyGrowthChart({
+  data,
+  height = 300,
+  className = "",
+}: {
+  data: Array<{ label: string; tenants: number; loanVolume: number }>;
+  height?: number;
+  className?: string;
+}) {
+  const formatLoanVolume = (value: number) =>
+    `RM ${value.toLocaleString("en-MY", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+
+  return (
+    <div className={className} style={{ height }}>
+      <ResponsiveContainer width="100%" height="100%">
+        <ComposedChart data={data} margin={{ top: 10, right: 50, left: 0, bottom: 0 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke={chartColors.grid} vertical={false} />
+          <XAxis
+            dataKey="label"
+            axisLine={false}
+            tickLine={false}
+            tick={{ fill: chartColors.axis, fontSize: 12 }}
+          />
+          <YAxis
+            yAxisId="tenants"
+            axisLine={false}
+            tickLine={false}
+            tick={{ fill: chartColors.axis, fontSize: 12 }}
+            width={32}
+          />
+          <YAxis
+            yAxisId="loanVolume"
+            orientation="right"
+            axisLine={false}
+            tickLine={false}
+            tick={{ fill: chartColors.axis, fontSize: 12 }}
+            width={50}
+            tickFormatter={(v) => (v >= 1000 ? `${(v / 1000).toFixed(0)}k` : v)}
+          />
+          <Tooltip
+            content={({ active, payload, label }) => {
+              if (!active || !payload?.length) return null;
+              return (
+                <div
+                  className="rounded-lg border px-3 py-2 shadow-lg"
+                  style={{
+                    backgroundColor: chartColors.tooltip.bg,
+                    borderColor: chartColors.tooltip.border,
+                  }}
+                >
+                  <p className="mb-1 text-xs font-medium text-slate-400">{label}</p>
+                  {payload.map((entry, index) => (
+                    <div key={index} className="flex items-center gap-2 text-sm">
+                      <div
+                        className="h-2 w-2 rounded-full"
+                        style={{ backgroundColor: entry.color }}
+                      />
+                      <span className="text-slate-300">{entry.name}:</span>
+                      <span className="font-medium text-white">
+                        {entry.dataKey === "loanVolume"
+                          ? formatLoanVolume(Number(entry.value))
+                          : Number(entry.value).toLocaleString()}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              );
+            }}
+          />
+          <Legend />
+          <Bar
+            yAxisId="tenants"
+            dataKey="tenants"
+            name="Tenants"
+            fill="#6366f1"
+            radius={[4, 4, 0, 0]}
+          />
+          <Line
+            yAxisId="loanVolume"
+            type="monotone"
+            dataKey="loanVolume"
+            name="Loan Volume (RM)"
+            stroke="#22c55e"
+            strokeWidth={2}
+            dot={false}
+            activeDot={{ r: 4, fill: "#22c55e" }}
+          />
+        </ComposedChart>
       </ResponsiveContainer>
     </div>
   );

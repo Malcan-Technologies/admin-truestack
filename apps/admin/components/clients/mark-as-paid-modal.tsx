@@ -87,7 +87,7 @@ export function MarkAsPaidModal({
           <DialogTitle className="text-white">Mark as Paid</DialogTitle>
           <DialogDescription className="text-slate-400">
             Record payment for {clientName}. This will trigger a signed webhook to
-            TrueStack Kredit.
+            TrueKredit.
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">

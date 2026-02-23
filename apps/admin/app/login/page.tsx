@@ -50,7 +50,7 @@ function LoginForm() {
         {/* Logo */}
         <div className="mx-auto mb-4">
           <Image
-            src="/truestack-white.svg"
+            src="/logo-dark.png"
             alt="TrueStack"
             width={180}
             height={40}
@@ -131,7 +131,7 @@ export default function LoginPage() {
             <CardHeader className="text-center">
               <div className="mx-auto mb-4">
                 <Image
-                  src="/truestack-white.svg"
+                  src="/logo-dark.png"
                   alt="TrueStack"
                   width={180}
                   height={40}

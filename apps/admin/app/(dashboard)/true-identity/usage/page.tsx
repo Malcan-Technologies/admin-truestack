@@ -214,7 +214,7 @@ export default function UsagePage() {
             Usage by Client
           </CardTitle>
           <CardDescription className="text-slate-400">
-            Breakdown of KYC sessions and billing by client. TrueStack Kredit tenants are grouped under their parent.
+            Breakdown of KYC sessions and billing by client. TrueKredit tenants are grouped under their parent.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -278,7 +278,7 @@ export default function UsagePage() {
                             : "border-slate-500/30 bg-slate-500/10 text-slate-400"
                         }
                       >
-                        {client.clientSource === "truestack_kredit" ? "Kredit" : "API"}
+                        {client.clientSource === "truestack_kredit" ? "TrueKredit" : "API"}
                       </Badge>
                     </TableCell>
 

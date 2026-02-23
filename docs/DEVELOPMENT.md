@@ -65,7 +65,7 @@ Create a `.env` file in the root directory:
 
 ```bash
 # Database
-DATABASE_URL="postgresql://postgres:postgres@localhost:5432/trueidentity"
+DATABASE_URL="postgresql://postgres:postgres@localhost:5433/trueidentity"
 
 # Authentication
 BETTER_AUTH_SECRET="development-secret-change-in-prod"
@@ -97,7 +97,7 @@ The database commands need `DATABASE_URL` to be available. Since Prisma runs fro
 **Option A: Export the variable first (recommended)**
 ```bash
 # Export DATABASE_URL for this terminal session
-export DATABASE_URL="postgresql://postgres:postgres@localhost:5432/trueidentity"
+export DATABASE_URL="postgresql://postgres:postgres@localhost:5433/trueidentity"
 
 # Generate Prisma client
 pnpm db:generate
@@ -115,10 +115,10 @@ pnpm db:seed
 pnpm db:generate
 
 # Run migrations with inline DATABASE_URL
-DATABASE_URL="postgresql://postgres:postgres@localhost:5432/trueidentity" pnpm db:migrate:dev
+DATABASE_URL="postgresql://postgres:postgres@localhost:5433/trueidentity" pnpm db:migrate:dev
 
 # Seed the database
-DATABASE_URL="postgresql://postgres:postgres@localhost:5432/trueidentity" pnpm db:seed
+DATABASE_URL="postgresql://postgres:postgres@localhost:5433/trueidentity" pnpm db:seed
 ```
 
 > **Note:** The `.env` file in the root is used by Next.js apps during `pnpm dev`, but Prisma CLI

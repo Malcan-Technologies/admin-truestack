@@ -8,12 +8,15 @@ import {
   Users,
   FileCheck,
   BarChart3,
+  CreditCard,
   Settings,
   LogOut,
   ChevronDown,
   Fingerprint,
   FlaskConical,
   ShieldCheck,
+  Building2,
+  Banknote,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { signOut } from "@/lib/auth-client";
@@ -23,6 +26,8 @@ interface NavItem {
   title: string;
   href: string;
   icon: React.ComponentType<{ className?: string }>;
+  /** When true, only exact path match highlights (avoids parent matching child routes) */
+  exact?: boolean;
 }
 
 interface NavSection {
@@ -34,30 +39,26 @@ interface NavSection {
 
 const navSections: NavSection[] = [
   {
-    title: "",
-    items: [
-      { title: "Dashboard", href: "/", icon: LayoutDashboard },
-    ],
-  },
-  {
-    title: "CLIENTS",
-    items: [
-      { title: "All Clients", href: "/clients", icon: Users },
-    ],
-  },
-  {
-    title: "TRUESTACK KREDIT",
-    items: [
-      { title: "Overview", href: "/truestack-kredit", icon: Users },
-    ],
-  },
-  {
-    title: "TRUEIDENTITY",
+    title: "TrueIdentity",
     collapsible: true,
     icon: Fingerprint,
     items: [
+      { title: "Overview", href: "/", icon: LayoutDashboard, exact: true },
+      { title: "Clients", href: "/clients", icon: Users },
       { title: "Sessions", href: "/true-identity/sessions", icon: FileCheck },
       { title: "Usage", href: "/true-identity/usage", icon: BarChart3 },
+    ],
+  },
+  {
+    title: "TrueKredit",
+    collapsible: true,
+    icon: Users,
+    items: [
+      { title: "Overview", href: "/truestack-kredit", icon: BarChart3, exact: true },
+      { title: "Tenants", href: "/truestack-kredit/tenants", icon: Building2 },
+      { title: "Borrowers", href: "/truestack-kredit/borrowers", icon: Users },
+      { title: "Loans", href: "/truestack-kredit/loans", icon: Banknote },
+      { title: "Payment Approvals", href: "/truestack-kredit/payments", icon: CreditCard },
     ],
   },
   {
@@ -100,7 +101,7 @@ export function Sidebar() {
       <div className="flex h-16 items-center border-b border-slate-800 px-6">
         <Link href="/" className="flex items-center gap-3">
           <Image
-            src="/truestack-white.svg"
+            src="/logo-dark.png"
             alt="TrueStack"
             width={120}
             height={32}
@@ -142,9 +143,11 @@ export function Sidebar() {
                 <div className="space-y-1">
                   {section.items.map((item) => {
                     const baseHref = item.href.split("?")[0];
-                    const isActive =
-                      pathname === item.href ||
-                      (item.href !== "/" && pathname.startsWith(baseHref));
+                    const isActive = item.exact
+                      ? pathname === baseHref
+                      : pathname === baseHref ||
+                        (baseHref !== "/" &&
+                          pathname.startsWith(baseHref + "/"));
                     const Icon = item.icon;
                     return (
                       <Link

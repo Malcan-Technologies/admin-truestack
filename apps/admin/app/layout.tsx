@@ -23,7 +23,7 @@ export const metadata: Metadata = {
   title: "TrueStack Admin",
   description: "TrueStack Internal Administration Portal",
   icons: {
-    icon: "/favicon.ico",
+    icon: "/favicon.png",
   },
 };
 

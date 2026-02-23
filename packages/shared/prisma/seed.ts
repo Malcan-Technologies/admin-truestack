@@ -42,7 +42,7 @@ async function main() {
     const accountId = `acc_${crypto.randomUUID()}`;
     
     // Hash password using Better Auth's scrypt (same as runtime)
-    const passwordHash = await hashPassword("changeme123");
+    const passwordHash = await hashPassword("Demo@123");
 
     // Create admin user
     const admin = await prisma.user.create({

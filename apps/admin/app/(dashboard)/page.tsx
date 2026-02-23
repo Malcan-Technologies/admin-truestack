@@ -120,8 +120,8 @@ export default function DashboardPage() {
   return (
     <div>
       <PageHeader
-        title="Dashboard"
-        description="Overview of your platform metrics and recent activity."
+        title="Overview"
+        description="TrueIdentity KYC platform metrics and recent activity."
       >
         <div className="flex items-center gap-3">
           <Select value={period} onValueChange={(v) => setPeriod(v as "daily" | "monthly")}>

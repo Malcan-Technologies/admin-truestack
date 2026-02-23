@@ -30,7 +30,7 @@ docker exec -i trueidentity-postgres psql -U postgres -d trueidentity < db/migra
 
 ```bash
 # Using the seed script
-DATABASE_URL=postgresql://postgres:postgres@localhost:5432/trueidentity pnpm seed:admin
+DATABASE_URL=postgresql://postgres:postgres@localhost:5433/trueidentity pnpm seed:admin
 
 # Or manually:
 docker exec -i trueidentity-postgres psql -U postgres -d trueidentity < db/migrations/002_seed_admin.sql
