@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { query, queryOne, withTransaction } from "@truestack/shared/db";
 import { decryptResponse, verifyWebhookSignature } from "@truestack/shared/innovatif";
 import { signOutboundWebhook } from "@truestack/shared/hmac-webhook";
+import { buildKreditCallbackPayload } from "@truestack/shared/kredit-callback-payload";
 import { uploadKycDocument, getPresignedUrls } from "@truestack/shared/s3";
 import crypto from "crypto";
 
@@ -589,73 +590,32 @@ async function triggerClientWebhook(sessionId: string) {
     // - kyc.session.processing: User is completing the KYC (status: processing)
     // - kyc.session.completed: KYC finished with result (status: completed)
     // - kyc.session.expired: Session timed out (status: expired)
-    let eventType = "kyc.session.updated";
-    switch (session.status) {
-      case "pending":
-        eventType = "kyc.session.started";
-        break;
-      case "processing":
-        eventType = "kyc.session.processing";
-        break;
-      case "completed":
-        eventType = "kyc.session.completed";
-        break;
-      case "expired":
-        eventType = "kyc.session.expired";
-        break;
-    }
-
-    const metadata = (session.metadata || {}) as Record<string, unknown>;
-
-    // Build document_images with presigned URLs for Kredit Borrower Documents
-    // Map: DIRECTOR_IC_FRONT, DIRECTOR_IC_BACK, DIRECTOR_PASSPORT, SELFIE_LIVENESS
-    const documentImages: Record<string, { url: string }> = {};
-    const docType = session.document_type || "1"; // "1" = IC, "2" = Passport
-
-    const s3KeysMap = {
-      front_document: session.s3_front_document,
-      back_document: session.s3_back_document,
-      face_image: session.s3_face_image,
-      best_frame: session.s3_best_frame,
-    };
-    const hasAnyImage = Object.values(s3KeysMap).some(Boolean);
-    if (hasAnyImage) {
-      try {
-        const presigned = await getPresignedUrls(s3KeysMap, DOCUMENT_URL_EXPIRY_SECONDS);
-        if (presigned.front_document) {
-          documentImages[docType === "2" ? "DIRECTOR_PASSPORT" : "DIRECTOR_IC_FRONT"] = {
-            url: presigned.front_document,
-          };
+    const isApproved =
+      session.status === "completed" && session.result === "approved";
+    let presigned: { front_document?: string; back_document?: string; face_image?: string; best_frame?: string } = {};
+    if (isApproved) {
+      const s3KeysMap = {
+        front_document: session.s3_front_document,
+        back_document: session.s3_back_document,
+        face_image: session.s3_face_image,
+        best_frame: session.s3_best_frame,
+      };
+      if (Object.values(s3KeysMap).some(Boolean)) {
+        try {
+          presigned = await getPresignedUrls(s3KeysMap, DOCUMENT_URL_EXPIRY_SECONDS);
+        } catch (err) {
+          console.warn("[Innovatif Webhook] Failed to generate presigned URLs for document images:", err);
         }
-        if (presigned.back_document && docType === "1") {
-          documentImages["DIRECTOR_IC_BACK"] = { url: presigned.back_document };
-        }
-        const selfieUrl = presigned.best_frame || presigned.face_image;
-        if (selfieUrl) {
-          documentImages["SELFIE_LIVENESS"] = { url: selfieUrl };
-        }
-      } catch (err) {
-        console.warn("[Innovatif Webhook] Failed to generate presigned URLs for document images:", err);
       }
     }
 
-    const webhookPayload = {
-      event: eventType,
-      session_id: session.id,
-      ref_id: session.ref_id,
-      status: session.status,
-      result: session.result,
-      reject_message: session.reject_message,
-      document_name: session.document_name,
-      document_number: session.document_number,
-      tenant_id: metadata.tenant_id ?? null,
-      borrower_id: metadata.borrower_id ?? null,
-      metadata: session.metadata,
-      timestamp: new Date().toISOString(),
-      ...(Object.keys(documentImages).length > 0 && { document_images: documentImages }),
-    };
+    const webhookPayload = buildKreditCallbackPayload(session, {
+      presigned,
+      adminBaseUrl: process.env.ADMIN_APP_URL?.trim(),
+    });
 
     const rawBody = JSON.stringify(webhookPayload);
+    const eventType = webhookPayload.event as string;
     const outboundSecret =
       process.env.TRUEIDENTITY_WEBHOOK_SECRET || process.env.KREDIT_WEBHOOK_SECRET || "";
     const headers: Record<string, string> = {

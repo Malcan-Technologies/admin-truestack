@@ -14,7 +14,8 @@
     "./pdf": "./lib/pdf.ts",
     "./invoice": "./lib/invoice.ts",
     "./types": "./types/index.ts",
-    "./hmac-webhook": "./lib/hmac-webhook.ts"
+    "./hmac-webhook": "./lib/hmac-webhook.ts",
+    "./kredit-callback-payload": "./lib/kredit-callback-payload.ts"
   },
   "scripts": {
     "db:generate": "prisma generate",

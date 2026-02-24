@@ -331,11 +331,19 @@ export async function POST(request: NextRequest) {
 
     const refId = generateRefId(tenantClient.code.substring(0, 8));
 
+    // Normalize director_id for corporate sessions (accept director_id or directorId from Kredit)
+    const directorId =
+      (metadata?.director_id as string) ?? (metadata?.directorId as string) ?? undefined;
+    const { director_id: _d1, directorId: _d2, ...restMetadata } = (metadata ?? {}) as Record<
+      string,
+      unknown
+    >;
     const sessionMetadata = {
       tenant_id,
       borrower_id,
       source: "truestack_kredit",
-      ...metadata,
+      ...restMetadata,
+      ...(directorId && { director_id: directorId }),
     };
 
     const session = await queryOne<{ id: string; ref_id: string; created_at: string }>(

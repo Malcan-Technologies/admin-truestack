@@ -10,6 +10,7 @@ This document describes the webhook and API contracts between TrueStack Admin (T
 | `TRUEIDENTITY_WEBHOOK_SECRET` or `KREDIT_WEBHOOK_SECRET` | Shared secret for signing outbound Admin → Kredit webhooks |
 | `KREDIT_BACKEND_URL` | Base URL for Kredit backend. Used for payment webhook and as fallback when Kredit sends localhost for status webhooks. |
 | `KREDIT_INTERNAL_SECRET` | Optional auth for usage API (falls back to `INTERNAL_API_KEY`) |
+| `ADMIN_APP_URL` | Base URL for Admin app. Used to build `verification_detail_url` in approved callbacks. If unset, `verification_detail_url` is omitted. |
 
 ---
 
@@ -71,7 +72,7 @@ This document describes the webhook and API contracts between TrueStack Admin (T
 | `document_number` | Yes | Document number (IC/Passport) |
 | `document_type` | No | Default `"1"` (IC) |
 | `webhook_url` | Yes | URL for status callbacks. Can be a full URL or path-only (e.g. `/api/webhooks/trueidentity`). Path-only requires Admin's `KREDIT_BACKEND_URL`. **Production:** Must not resolve to localhost. |
-| `metadata` | No | Additional context |
+| `metadata` | No | Additional context. For corporate sessions, include `director_id` or `directorId` (Admin normalizes to `director_id` and echoes it in the status callback). |
 
 ### Response (200 OK)
 
@@ -113,7 +114,12 @@ This document describes the webhook and API contracts between TrueStack Admin (T
 | `Content-Type` | `application/json` |
 | `X-TrueStack-Event` | Event type (e.g. `kyc.session.completed`) |
 
-### Payload
+### Document URL Rules
+
+- **Approved only:** `ic_front_url`, `ic_back_url`, `selfie_url`, `verification_detail_url`, and `document_images` are **only** included when `event === "kyc.session.completed"` and `result === "approved"`.
+- **Rejected / non-completed:** Callbacks **must not** include any document URL fields or `document_images`. Kredit receives status-only payloads.
+
+### Payload (approved example)
 
 ```json
 {
@@ -122,6 +128,7 @@ This document describes the webhook and API contracts between TrueStack Admin (T
   "ref_id": "string",
   "tenant_id": "string",
   "borrower_id": "string",
+  "director_id": "string",
   "status": "completed",
   "result": "approved",
   "reject_message": null,
@@ -129,6 +136,10 @@ This document describes the webhook and API contracts between TrueStack Admin (T
   "document_number": "string",
   "metadata": {},
   "timestamp": "2025-02-18T12:00:00.000Z",
+  "ic_front_url": "https://...",
+  "ic_back_url": "https://...",
+  "selfie_url": "https://...",
+  "verification_detail_url": "https://admin.example.com/clients/uuid",
   "document_images": {
     "DIRECTOR_IC_FRONT": { "url": "https://..." },
     "DIRECTOR_IC_BACK": { "url": "https://..." },
@@ -138,7 +149,39 @@ This document describes the webhook and API contracts between TrueStack Admin (T
 }
 ```
 
-**document_images** (optional, only on `kyc.session.completed`): Presigned URLs for KYC document images. Keys match Borrower Document categories. Only present when images exist. URLs expire in 24 hours.
+### Payload (rejected example)
+
+```json
+{
+  "event": "kyc.session.completed",
+  "session_id": "uuid",
+  "ref_id": "string",
+  "tenant_id": "string",
+  "borrower_id": "string",
+  "director_id": "string",
+  "status": "completed",
+  "result": "rejected",
+  "reject_message": "Document verification failed",
+  "document_name": "string",
+  "document_number": "string",
+  "metadata": {},
+  "timestamp": "2025-02-18T12:00:00.000Z"
+}
+```
+
+### Top-level fields
+
+| Field | Description |
+|-------|-------------|
+| `director_id` | Echoed from metadata when present (normalized from `director_id` or `directorId` in verification request). Omitted if not provided. |
+| `ic_front_url` | Presigned URL for IC/Passport front. **Approved only.** |
+| `ic_back_url` | Presigned URL for IC back. **Approved only.** Omitted for passport (document_type 2). |
+| `selfie_url` | Presigned URL for selfie/liveness. **Approved only.** |
+| `verification_detail_url` | Admin deep-link to client detail page (`{ADMIN_APP_URL}/clients/{client_id}`). **Approved only.** Omitted if `ADMIN_APP_URL` is not set. |
+
+### document_images
+
+**Optional, approved only.** Presigned URLs for KYC document images. Keys match Borrower Document categories. Only present when images exist and `result === "approved"`. URLs expire in 24 hours.
 
 | Key | Description |
 |-----|-------------|
