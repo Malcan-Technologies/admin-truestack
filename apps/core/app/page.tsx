@@ -1,3 +1,5 @@
+import Image from "next/image";
+import Link from "next/link";
 import {
   ArrowRight,
   Shield,
@@ -102,16 +104,18 @@ export default function Home() {
       {/* Header */}
       <header className="border-b border-slate-800 bg-slate-950/80 backdrop-blur-xl sticky top-0 z-50">
         <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
-          <a href="/" className="flex items-center gap-3">
-            <img 
-              src="/truestack-white.svg" 
+          <Link href="/" className="flex items-center gap-3">
+            <Image 
+              src="/logo-dark.png" 
               alt="TrueStack" 
-              className="h-7"
+              width={140}
+              height={28}
+              className="h-7 w-auto"
             />
             <span className="text-lg font-semibold bg-linear-to-r from-indigo-400 to-violet-400 bg-clip-text text-transparent">
               Core
             </span>
-          </a>
+          </Link>
           <nav className="hidden md:flex items-center gap-6">
             <a href="#benefits" className="text-slate-400 hover:text-white transition text-sm">Benefits</a>
             <a href="#how-it-works" className="text-slate-400 hover:text-white transition text-sm">How It Works</a>
@@ -661,16 +665,18 @@ export default function Home() {
       <footer className="py-12 border-t border-slate-800">
         <div className="max-w-6xl mx-auto px-6">
           <div className="flex flex-col md:flex-row items-center justify-between gap-6">
-            <a href="/" className="flex items-center gap-3">
-              <img 
-                src="/truestack-white.svg" 
+            <Link href="/" className="flex items-center gap-3">
+              <Image 
+                src="/logo-dark.png" 
                 alt="TrueStack" 
-                className="h-6"
+                width={120}
+                height={24}
+                className="h-6 w-auto"
               />
               <span className="text-sm font-semibold bg-linear-to-r from-indigo-400 to-violet-400 bg-clip-text text-transparent">
                 Core
               </span>
-            </a>
+            </Link>
             <div className="flex items-center gap-6 text-sm text-slate-400">
               <a href="https://truestack.my" className="hover:text-white transition flex items-center gap-1">
                 Main Website <ExternalLink className="w-3 h-3" />
