@@ -27,7 +27,7 @@ export default async function KycRedirectPage({
       {/* Logo */}
       <div className="mb-8">
         <Image
-          src="/truestack-black.svg"
+          src="/logo-light.png"
           alt="TrueStack"
           width={180}
           height={48}
