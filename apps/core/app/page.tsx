@@ -690,7 +690,7 @@ export default function Home() {
             </div>
           </div>
           <div className="mt-8 pt-8 border-t border-slate-800 text-center text-sm text-slate-500">
-            <p>&copy; {new Date().getFullYear()} TrueStack Sdn Bhd. All rights reserved.</p>
+            <p>&copy; {new Date().getFullYear()} TrueStack Technologies Sdn Bhd. All rights reserved.</p>
             <p className="mt-1">Infrastructure & Identity Services for Malaysia</p>
           </div>
         </div>
