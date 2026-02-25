@@ -14,7 +14,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { AlertTriangle, Fingerprint, RefreshCw, Users } from "lucide-react";
+import { AlertTriangle, ChartPie, Fingerprint, RefreshCw, Users } from "lucide-react";
 import { apiClient, formatDate } from "@/lib/utils";
 import { toast } from "sonner";
 
@@ -25,10 +25,12 @@ type BorrowersResponse = {
     id: string;
     name: string;
     borrowerType: string;
+    companyName: string | null;
     icNumber: string;
     email: string | null;
     phone: string | null;
     documentVerified: boolean;
+    verificationStatus: "FULLY_VERIFIED" | "PARTIALLY_VERIFIED" | "UNVERIFIED" | null;
     tenant: {
       id: string;
       name: string;
@@ -178,8 +180,17 @@ export default function KreditBorrowersPage() {
                   {data?.borrowers.map((borrower) => (
                     <TableRow key={borrower.id} className="border-slate-800">
                       <TableCell>
-                        <p className="text-white font-medium">{borrower.name}</p>
-                        <p className="text-xs text-slate-500">{borrower.email || borrower.phone || "-"}</p>
+                        <p className="text-white font-medium">
+                          {borrower.borrowerType === "CORPORATE" && borrower.companyName
+                            ? borrower.companyName
+                            : borrower.name}
+                        </p>
+                        {borrower.borrowerType === "CORPORATE" && borrower.companyName && (
+                          <p className="text-xs text-slate-500">Rep: {borrower.name}</p>
+                        )}
+                        {(!borrower.companyName || borrower.borrowerType !== "CORPORATE") && (
+                          <p className="text-xs text-slate-500">{borrower.email || borrower.phone || "-"}</p>
+                        )}
                       </TableCell>
                       <TableCell>
                         <p className="text-slate-200">{borrower.tenant.name}</p>
@@ -193,23 +204,58 @@ export default function KreditBorrowersPage() {
                       <TableCell className="text-slate-300">{borrower.icNumber}</TableCell>
                       <TableCell className="text-slate-300">{borrower.phone || "-"}</TableCell>
                       <TableCell>
-                        {borrower.documentVerified ? (
-                          <Badge
-                            className="border-green-500/30 bg-green-500/10 text-green-400"
-                            title="Verified via TrueIdentity e-KYC"
-                          >
-                            <Fingerprint className="mr-1 h-3 w-3" />
-                            e-KYC
-                          </Badge>
-                        ) : (
-                          <Badge
-                            className="border-amber-500/30 bg-amber-500/10 text-amber-400"
-                            title="Manually verified by admin"
-                          >
-                            <AlertTriangle className="mr-1 h-3 w-3" />
-                            Manual
-                          </Badge>
-                        )}
+                        {(() => {
+                          const isFullyVerified =
+                            borrower.verificationStatus === "FULLY_VERIFIED" ||
+                            (!borrower.verificationStatus && borrower.documentVerified);
+                          const isPartiallyVerified = borrower.verificationStatus === "PARTIALLY_VERIFIED";
+
+                          if (isFullyVerified) {
+                            return (
+                              <Badge
+                                className="border-green-500/30 bg-green-500/10 text-green-400"
+                                title="Verified via TrueIdentity e-KYC"
+                              >
+                                <Fingerprint className="mr-1 h-3 w-3" />
+                                e-KYC
+                              </Badge>
+                            );
+                          }
+                          if (isPartiallyVerified) {
+                            return (
+                              <Badge
+                                className="border-cyan-500/30 bg-cyan-500/10 text-cyan-400"
+                                title="Some corporate directors are verified, but not all yet"
+                              >
+                                <ChartPie className="mr-1 h-3 w-3" />
+                                Partially verified
+                              </Badge>
+                            );
+                          }
+                          const isUnverified =
+                            borrower.verificationStatus === "UNVERIFIED" ||
+                            (!borrower.verificationStatus && !borrower.documentVerified);
+                          if (isUnverified) {
+                            return (
+                              <Badge
+                                className="border-amber-500/30 bg-amber-500/10 text-amber-400"
+                                title="Borrower not verified via e-KYC"
+                              >
+                                <AlertTriangle className="mr-1 h-3 w-3" />
+                                Unverified
+                              </Badge>
+                            );
+                          }
+                          return (
+                            <Badge
+                              className="border-amber-500/30 bg-amber-500/10 text-amber-400"
+                              title="Manually verified by admin"
+                            >
+                              <AlertTriangle className="mr-1 h-3 w-3" />
+                              Manual
+                            </Badge>
+                          );
+                        })()}
                       </TableCell>
                       <TableCell>
                         {(() => {
