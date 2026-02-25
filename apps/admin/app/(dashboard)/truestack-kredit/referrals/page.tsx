@@ -14,7 +14,13 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { CheckCircle2, Gift, RefreshCw, Users, Wallet } from "lucide-react";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { CheckCircle2, Copy, Gift, RefreshCw, Users, Wallet } from "lucide-react";
 import { apiClient, formatDateTime } from "@/lib/utils";
 import { toast } from "sonner";
 
@@ -22,6 +28,10 @@ type Referrer = {
   id: string;
   email: string;
   name: string;
+  referralBankAccountName: string | null;
+  referralBankName: string | null;
+  referralBankNameOther: string | null;
+  referralBankAccountNo: string | null;
 };
 
 type ReferredUser = {
@@ -69,6 +79,39 @@ const DEFAULT_PAGE_SIZE = 20;
 
 function formatRM(cents: number) {
   return `RM ${(cents / 100).toLocaleString("en-MY", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+async function copyToClipboard(text: string) {
+  await navigator.clipboard.writeText(text);
+  toast.success("Account number copied to clipboard");
+}
+
+function getBankLabel(bankName: string | null, bankNameOther: string | null) {
+  if (!bankName) return "-";
+  if (bankName === "OTHER" && bankNameOther) return bankNameOther;
+
+  const labels: Record<string, string> = {
+    MAYBANK: "Maybank",
+    CIMB: "CIMB Bank",
+    PUBLIC_BANK: "Public Bank",
+    RHB: "RHB Bank",
+    HONG_LEONG: "Hong Leong Bank",
+    AMBANK: "AmBank",
+    BANK_ISLAM: "Bank Islam",
+    BANK_RAKYAT: "Bank Rakyat",
+    BSN: "BSN",
+    AFFIN: "Affin Bank",
+    ALLIANCE: "Alliance Bank",
+    OCBC: "OCBC Bank",
+    UOB: "UOB",
+    HSBC: "HSBC",
+    STANDARD_CHARTERED: "Standard Chartered",
+    AGROBANK: "Agrobank",
+    MUAMALAT: "Bank Muamalat",
+    MBSB: "MBSB",
+  };
+
+  return labels[bankName] || bankName;
 }
 
 export default function KreditReferralsPage() {
@@ -276,7 +319,7 @@ export default function KreditReferralsPage() {
           ) : (data?.referrals.length ?? 0) === 0 ? (
             <p className="text-sm text-slate-400">No referrals found.</p>
           ) : (
-            <>
+            <TooltipProvider>
               <Table>
                 <TableHeader>
                   <TableRow className="border-slate-800 hover:bg-transparent">
@@ -284,6 +327,7 @@ export default function KreditReferralsPage() {
                     <TableHead className="text-slate-400">Referred User</TableHead>
                     <TableHead className="text-slate-400">Referral Code</TableHead>
                     <TableHead className="text-slate-400">Reward</TableHead>
+                    <TableHead className="text-slate-400">Payout To</TableHead>
                     <TableHead className="text-slate-400">Status</TableHead>
                     <TableHead className="text-slate-400">Eligible/Paid Date</TableHead>
                     <TableHead className="text-slate-400">Actions</TableHead>
@@ -307,6 +351,41 @@ export default function KreditReferralsPage() {
                       </TableCell>
                       <TableCell>
                         <p className="text-green-400 font-medium">{formatRM(referral.rewardAmount)}</p>
+                      </TableCell>
+                      <TableCell>
+                        <p className="text-slate-200">
+                          {referral.referrer.referralBankAccountName || "-"}
+                        </p>
+                        <p className="text-xs text-slate-500">
+                          {getBankLabel(
+                            referral.referrer.referralBankName,
+                            referral.referrer.referralBankNameOther
+                          )}
+                        </p>
+                        <div className="flex items-center gap-1.5">
+                          <p className="text-xs font-mono text-slate-500">
+                            {referral.referrer.referralBankAccountNo || "-"}
+                          </p>
+                          {referral.referrer.referralBankAccountNo && (
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-6 w-6 text-slate-500 hover:text-white"
+                                  onClick={() =>
+                                    copyToClipboard(referral.referrer.referralBankAccountNo!)
+                                  }
+                                >
+                                  <Copy className="h-3.5 w-3.5" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p>Copy account number</p>
+                              </TooltipContent>
+                            </Tooltip>
+                          )}
+                        </div>
                       </TableCell>
                       <TableCell>
                         {getStatusBadge(referral)}
@@ -368,7 +447,7 @@ export default function KreditReferralsPage() {
                   </Button>
                 </div>
               </div>
-            </>
+            </TooltipProvider>
           )}
         </CardContent>
       </Card>
